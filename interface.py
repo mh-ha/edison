@@ -1,17 +1,19 @@
 from abc import ABC, abstractmethod
 
 class Adapter(ABC):
-    def __init__(self) -> None:
-        super().__init__()
-    
     @abstractmethod
-    def set_model(self, model):
+    def init_network(self):
         pass
 
     @abstractmethod
-    def set_callback(self, callback):
+    def init_callback(self):
         pass
 
     @abstractmethod
-    def set_config(self, config):
+    def init_config(self):
         pass
+
+    @abstractmethod
+    def init_training_library(self):
+        pass
+

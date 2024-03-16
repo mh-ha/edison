@@ -4,7 +4,7 @@ import torch.nn as nn
 import torch.nn.functional as F
 
 
-class Network(ABC, nn.Module):
+class PytorchBasedNetwork(ABC, nn.Module):
     def __init__(self) -> None:
         super().__init__()
 
@@ -13,11 +13,11 @@ class Network(ABC, nn.Module):
         pass
 
 
-class Network1(nn.Module):
+class Network1(PytorchBasedNetwork):
     pass
 
-class Network2(nn.Module):
+class Network2(PytorchBasedNetwork):
     pass
 
-class Network3(nn.Module):
+class Network3(PytorchBasedNetwork):
     pass

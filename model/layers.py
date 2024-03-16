@@ -1,18 +1,23 @@
 
 
+class PytorchLayers():
+    @staticmethod
+    def feed_forward():
+        pass
 
-def feed_forward():
-    pass
+    @staticmethod
+    def absolute_positional_encoding():
+        pass
 
-def absolute_positional_encoding():
-    pass
+    @staticmethod
+    def attention():
+        pass
 
-def attention():
-    pass
+    @staticmethod
+    def multi_head_attention():
+        pass
 
-def multi_head_attention():
-    pass
-
-def transformer():
-    pass
+    @staticmethod
+    def transformer():
+        pass
 

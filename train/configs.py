@@ -2,9 +2,6 @@ from abc import ABC, abstractmethod
 
 
 class Config(ABC):
-    def __init__(self) -> None:
-        super().__init__()
-
     @abstractmethod
     def set_loss_fn(self, loss_fn):
         pass
