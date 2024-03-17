@@ -1,5 +1,5 @@
 from abc import ABCMeta, abstractmethod
-import layers
+from . import layers
 import torch.nn as nn
 import torch.nn.functional as F
 

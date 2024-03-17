@@ -1,4 +1,5 @@
 from abc import ABCMeta, abstractmethod
+from typing import Callable
 from setting.callbacks import Callback
 from setting.networks import Network
 from setting.optimizers import Optimizer
@@ -29,7 +30,7 @@ class Setting(metaclass=ABCMeta):
     def init_network(self) -> Network: pass
 
     @abstractmethod
-    def init_loss_function(self) -> function: pass
+    def init_loss_function(self) -> Callable: pass
 
     @abstractmethod
     def init_optimizer(self) -> Optimizer: pass
@@ -38,10 +39,10 @@ class Setting(metaclass=ABCMeta):
     def init_callback(self) -> Callback: pass
 
     @abstractmethod
-    def init_data(self) -> function: pass
+    def init_data(self) -> Callable: pass
 
     @abstractmethod
-    def init_logging_function(self) -> function: pass
+    def init_logging_function(self) -> Callable: pass
 
     @abstractmethod
     def init_config(self) -> dict: pass
@@ -54,37 +55,6 @@ class Setting(metaclass=ABCMeta):
 
     def summary(self):
         pass
-
-
-class PyTorchSetting(Setting):
-    def __init__(self):
-        super().__init__()
-
-    def init_network(self):
-        pass
-
-    def forward(self, x):
-        pass
-
-    def init_loss_function(self):
-        pass
-
-    def init_optimizer(self):
-        pass
-
-    def init_callback(self):
-        pass
-
-    def init_data(self):
-        pass
-
-    def init_logging(self):
-        pass
-
-    def init_config(self):
-        pass
-
-
 
 
 class DistributedTrainingWrapper(metaclass=ABCMeta):
