@@ -1,15 +1,9 @@
-from abc import ABC, abstractmethod
+from dataclasses import dataclass
 
-
-class Config(ABC):
-    @abstractmethod
-    def set_loss_fn(self, loss_fn):
-        pass
-
-    @abstractmethod
-    def set_optimizer(self, optimizer):
-        pass
-
-    @abstractmethod
-    def set_hparams(self, hparams):
-        pass
+@dataclass
+class Config:
+    batch_size: int
+    learning_rate: float
+    epochs: int
+    device: str
+    seed: int

@@ -3,6 +3,9 @@ from typing import Callable
 from setting.callbacks import Callback
 from setting.networks import Network
 from setting.optimizers import Optimizer
+from setting.configs import Config
+from setting.data import Data
+from setting.loss import Loss
 
 class Setting(metaclass=ABCMeta):
     """
@@ -13,18 +16,16 @@ class Setting(metaclass=ABCMeta):
         - init_optimizer
         - init_callback: logging, early stopping, scheduler, etc.
         - init_data: train, validation, test, etc.
-        - init_logging_function: tensorboard, wandb, etc.
         - init_config: hyperparameters, etc.
         - forward: forward pass of the network
     """
     def __init__(self):
-        self.network = self.init_network()
-        self.loss_fn = self.init_loss_function()
-        self.optimizer = self.init_optimizer()
-        self.callback = self.init_callback()
-        self.data = self.init_data()
-        self.logging_fn = self.init_logging_function()
-        self.config = self.init_config()
+        self.network: Network = self.init_network()
+        self.loss_fn: Loss = self.init_loss_function()
+        self.optimizer: Optimizer = self.init_optimizer()
+        self.callback: Callback = self.init_callback()
+        self.data: Data = self.init_data()
+        self.config: Config = self.init_config()
 
     @abstractmethod
     def init_network(self) -> Network: pass
@@ -40,9 +41,6 @@ class Setting(metaclass=ABCMeta):
 
     @abstractmethod
     def init_data(self) -> Callable: pass
-
-    @abstractmethod
-    def init_logging_function(self) -> Callable: pass
 
     @abstractmethod
     def init_config(self) -> dict: pass

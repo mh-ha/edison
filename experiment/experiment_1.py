@@ -22,9 +22,6 @@ class PyTorchSetting(Setting):
     def init_data(self):
         pass
 
-    def init_logging_function(self):
-        pass
-
     def init_config(self):
         pass
 
