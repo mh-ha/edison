@@ -1,10 +1,13 @@
-from abc import ABC, abstractmethod
+from abc import ABCMeta, abstractmethod
 import layers
 import torch.nn as nn
 import torch.nn.functional as F
 
 
-class PytorchBasedNetwork(ABC, nn.Module):
+class Network(metaclass=ABCMeta):
+    pass
+
+class PytorchBasedNetwork(Network):
     def __init__(self) -> None:
         super().__init__()
 
