@@ -4,3 +4,7 @@ class Loss(metaclass=ABCMeta):
     @abstractmethod
     def __call__(self, *args, **kwargs):
         pass
+
+    @staticmethod
+    def gradient(*args, **kwargs):
+        pass

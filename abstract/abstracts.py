@@ -1,5 +1,4 @@
 from abc import ABCMeta, abstractmethod
-from typing import Callable
 from setting.callbacks import Callback
 from setting.networks import Network
 from setting.optimizers import Optimizer
@@ -7,9 +6,12 @@ from setting.configs import Config
 from setting.data import Data
 from setting.loss import Loss
 
-class Setting(metaclass=ABCMeta):
+class DLSetting(metaclass=ABCMeta):
     """
-    This class is designed to be used as a base class for setting up a neural network.
+    목적:
+        Deep Learning 실험을 위한 모든 객체 묶음
+        다양한 프레임워크 래퍼에서 사용 가능한 단일 인터페이스
+
     You should subclass this class and implement the following methods:
         - init_network: model, layers, etc.
         - init_loss_function
@@ -20,43 +22,53 @@ class Setting(metaclass=ABCMeta):
         - forward: forward pass of the network
     """
     def __init__(self):
-        self.network: Network = self.init_network()
-        self.loss_fn: Loss = self.init_loss_function()
-        self.optimizer: Optimizer = self.init_optimizer()
-        self.callback: Callback = self.init_callback()
-        self.data: Data = self.init_data()
-        self.config: Config = self.init_config()
+        self.network: Network
+        self.loss: Loss
+        self.optimizer: Optimizer
+        self.callback: Callback
+        self.data: Data
+        self.config: Config
 
-    @abstractmethod
-    def init_network(self) -> Network: pass
-
-    @abstractmethod
-    def init_loss_function(self) -> Callable: pass
-
-    @abstractmethod
-    def init_optimizer(self) -> Optimizer: pass
-
-    @abstractmethod
-    def init_callback(self) -> Callback: pass
-
-    @abstractmethod
-    def init_data(self) -> Callable: pass
-
-    @abstractmethod
-    def init_config(self) -> dict: pass
+        # Check the network process
+        self.test_network_process()
 
     @abstractmethod
     def forward(self, x): pass
 
+    @abstractmethod
+    def calculate_loss(self, x, y): pass
+
+    @abstractmethod
+    def get_optimizer(self): pass
+
+    @abstractmethod
+    def get_callback_list(self): pass
+
+    @abstractmethod
+    def get_dataset(self): pass
+
+    @abstractmethod
+    def get_config(self): pass
+
     def test_network_process(self):
-        pass
+        print("Testing the network process...")
+        # 1. Forward pass
+        x = self.data.take(1)
+        y = self.forward(x)
+        # 2. Calculate loss
+        loss = self.loss(x, y)
+        # 3. Calculate gradient
+        gradient = self.loss.gradient(loss)
+        # 4. Update weights
+        self.optimizer.step(self.network, gradient)
+        print("Network process is working correctly.")
 
     def summary(self):
         pass
 
 
-class DistributedTrainingWrapper(metaclass=ABCMeta):
-    def __init__(self, setting):
+class DLTrainingWrapper(metaclass=ABCMeta):
+    def __init__(self, setting: DLSetting):
         self.setting = setting
     
     @abstractmethod
@@ -66,8 +78,8 @@ class DistributedTrainingWrapper(metaclass=ABCMeta):
     def validation(self):
         pass
         
-class PyTorchLightningWrapper(DistributedTrainingWrapper):
-    def __init__(self, setting):
+class PyTorchLightningWrapper(DLTrainingWrapper):
+    def __init__(self, setting: DLSetting):
         super().__init__(setting)
         # PyTorch Lightning-specific initialization
 
@@ -77,8 +89,8 @@ class PyTorchLightningWrapper(DistributedTrainingWrapper):
         trainer = Trainer(...)
         trainer.fit(self.setting.model, self.setting.data)
 
-class FlaxWrapper(DistributedTrainingWrapper):
-    def __init__(self, setting):
+class FlaxWrapper(DLTrainingWrapper):
+    def __init__(self, setting: DLSetting):
         super().__init__(setting)
         # Flax-specific initialization
 

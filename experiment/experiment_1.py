@@ -1,29 +1,26 @@
-from abstract.abstracts import Setting
+from abstract.abstracts import DLSetting
 from setting.callbacks import Callback
 from setting.networks import Network
 from setting.optimizers import Optimizer
 
-class PyTorchSetting(Setting):
+class PyTorchDLSetting(DLSetting):
     def __init__(self):
         super().__init__()
 
-    def init_network(self):
-        pass
-
-    def init_loss_function(self):
-        pass
-
-    def init_optimizer(self):
-        pass
-
-    def init_callback(self):
-        pass
-
-    def init_data(self):
-        pass
-
-    def init_config(self):
-        pass
-
     def forward(self, x):
+        pass
+
+    def calculate_loss(self, x, y):
+        pass
+
+    def get_optimizer(self):
+        pass
+
+    def get_callback_list(self):
+        pass
+
+    def get_dataset(self):
+        pass
+
+    def get_config(self):
         pass

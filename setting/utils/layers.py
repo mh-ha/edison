@@ -3,7 +3,7 @@ import torch.nn as nn
 import torch.nn.functional as F
 import einops
 
-class PytorchLayers():
+class PytorchLayers:
     @staticmethod
     def feed_forward():
         pass
