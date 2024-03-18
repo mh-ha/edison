@@ -3,9 +3,9 @@ import torch
 
 
 
-# Define the PyTorch specific facade class
 class PyTorchFacade(Facade):
+    """
+    PyTorch로 구현한 Facade 클래스
+    """
     def feedforward(self, layer):
-        # PyTorch specific feedforward implementation
         pass
-    # ... other methods implementation
