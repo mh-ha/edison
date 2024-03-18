@@ -1,26 +1,27 @@
 from abc import ABCMeta, abstractmethod
-from .utils import layers
-import torch.nn as nn
-import torch.nn.functional as F
-
+from facade.entrypoint import get_facade
+from setting.configs import Config
 
 class Network(metaclass=ABCMeta):
-    pass
-
-class PytorchBasedNetwork(Network):
-    def __init__(self) -> None:
-        super().__init__()
-
+    def __init__(self, base_framework_name:str) -> None:
+        self.lib = get_facade(base_framework_name)
+    
     @abstractmethod
+    def forward(self, x): pass
+
+class NetworkPreset1(Network):
+    def __init__(
+            self,
+            config:Config,
+            **kwargs
+            ) -> None:
+        super().__init__(config.base_framework_name)
+        
     def forward(self, x):
         pass
 
-
-class Network1(PytorchBasedNetwork):
-    pass
-
-class Network2(PytorchBasedNetwork):
-    pass
-
-class Network3(PytorchBasedNetwork):
-    pass
+    def encode(self, x):
+        pass
+    
+    def decode(self, x):
+        pass

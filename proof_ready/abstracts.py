@@ -4,7 +4,7 @@ from setting.networks import Network
 from setting.optimizers import Optimizer
 from setting.configs import Config
 from setting.data import Data
-from setting.loss import Loss
+from setting.losses import Loss
 
 class DLProofReady(metaclass=ABCMeta):
     """
@@ -21,34 +21,63 @@ class DLProofReady(metaclass=ABCMeta):
         - init_config: hyperparameters, etc.
         - forward: forward pass of the network
     """
-    def __init__(self):
-        self.network: Network
-        self.loss: Loss
-        self.optimizer: Optimizer
-        self.callback: Callback
-        self.data: Data
-        self.config: Config
-
-        # Check the network process
-        self.test_network_process()
-
     @abstractmethod
     def forward(self, x): pass
 
-    @abstractmethod
-    def get_loss_fn(self): pass
+    @property
+    def config(self): return self._config
+    @config.setter
+    def config(self, config):
+        assert isinstance(config, Config), "config must be an instance of Config class."
+        self._config = config
+        self.__dict__.update(config.__dict__)
+    @config.deleter
+    def config(self): del self._config
 
-    @abstractmethod
-    def get_optimizer(self): pass
+    @property
+    def network(self): return self._network
+    @network.setter
+    def network(self, network):
+        assert isinstance(network, Network), "network must be an instance of Network class."
+        self._network = network
+    @network.deleter
+    def network(self): del self._network
 
-    @abstractmethod
-    def get_callback_list(self): pass
+    @property
+    def loss(self): return self._loss
+    @loss.setter
+    def loss(self, loss):
+        assert isinstance(loss, Loss), "loss must be an instance of Loss class."
+        self._loss = loss
+    @loss.deleter
+    def loss(self): del self._loss
 
-    @abstractmethod
-    def get_dataset(self): pass
+    @property
+    def optimizer(self): return self._optimizer
+    @optimizer.setter
+    def optimizer(self, optimizer):
+        assert isinstance(optimizer, Optimizer), "optimizer must be an instance of Optimizer class."
+        self._optimizer = optimizer
+    @optimizer.deleter
+    def optimizer(self): del self._optimizer
 
-    @abstractmethod
-    def get_config(self): pass
+    @property
+    def data(self): return self._data
+    @data.setter
+    def data(self, data):
+        assert isinstance(data, Data), "data must be an instance of Data class."
+        self._data = data
+    @data.deleter
+    def data(self): del self._data
+    
+    @property
+    def callback(self): return self._callback
+    @callback.setter
+    def callback(self, callback):
+        assert isinstance(callback, Callback), "callback must be an instance of Callback class."
+        self._callback = callback
+    @callback.deleter
+    def callback(self): del self._callback
 
     def test_network_process(self):
         print("Testing the network process...")

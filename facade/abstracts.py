@@ -33,10 +33,23 @@ class Facade(ABC):
     def transformer():
         pass
 
+    @staticmethod
+    @abstractmethod
+    def pretrained():
+        pass
+
+    ########################################
+    # Loss
+    @staticmethod
+    @abstractmethod
+    def cross_entropy():
+        pass
+
+
     ########################################
     # Optimizer
 
     @staticmethod
     @abstractmethod
-    def opt_adam():
+    def adam():
         pass
