@@ -1,10 +1,10 @@
 import torch
 from torch import utils
 import lightning as L
-from networks import LD4LG
+from networks import LatentGenerator
 
 
-model = LD4LG()
+model = LatentGenerator()
 dataset = None #TODO: Lightning supports ANY iterable (DataLoader, numpy, etc…) for the train/val/test/predict splits.
 train_loader = utils.data.DataLoader(dataset, batch_size=32)
 
@@ -15,7 +15,7 @@ trainer.fit(model=model, train_dataloaders=train_loader)
 
 # load checkpoint
 checkpoint = "./lightning_logs/version_0/checkpoints/epoch=0-step=100.ckpt"
-autoencoder = LD4LG.load_from_checkpoint(checkpoint)
+autoencoder = LatentGenerator.load_from_checkpoint(checkpoint)
 
 # choose your trained nn.Module
 encoder = autoencoder.encoder

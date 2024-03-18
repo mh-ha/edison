@@ -6,19 +6,17 @@ import lightning as L
 from transformers import AutoTokenizer
 from transformers.models.bart.modeling_bart import BartForConditionalGeneration
 
-class LD4LG(L.LightningModule):
+from layers import PerceiverResampler
+
+class LatentGenerator(L.LightningModule):
     def __init__(
             self,
             pretrained_model,
-            encoder,
-            decoder,
-            diffusion_model,
+            autoencoder,
             ):
         super().__init__()
         self.pretrained_model = pretrained_model
-        self.encoder = encoder
-        self.decoder = decoder
-        self.diffusion_model = diffusion_model
+        self.autoencoder = autoencoder
 
     # required
     def training_step(self, batch, batch_idx):
@@ -48,6 +46,10 @@ class LD4LG(L.LightningModule):
     
 pretrained_model = BartForConditionalGeneration.from_pretrained('facebook/bart-base')
 tokenizer = AutoTokenizer.from_pretrained('facebook/bart-base')
+autoencoder = PerceiverResampler(
+    dim=1024, dim_latent=256, depth=6, dim_head=64,
+    num_latents=8, max_seq_len=64, ff_mult=4, l2_normalize_latents=True
+    )
 
 class Diffusion(L.LightningModule):
     def __init__(
