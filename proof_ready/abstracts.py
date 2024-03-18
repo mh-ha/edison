@@ -6,7 +6,7 @@ from setting.configs import Config
 from setting.data import Data
 from setting.loss import Loss
 
-class DLSetting(metaclass=ABCMeta):
+class DLProofReady(metaclass=ABCMeta):
     """
     목적:
         Deep Learning 실험을 위한 모든 객체 묶음
@@ -36,7 +36,7 @@ class DLSetting(metaclass=ABCMeta):
     def forward(self, x): pass
 
     @abstractmethod
-    def calculate_loss(self, x, y): pass
+    def get_loss_fn(self): pass
 
     @abstractmethod
     def get_optimizer(self): pass
@@ -64,37 +64,4 @@ class DLSetting(metaclass=ABCMeta):
         print("Network process is working correctly.")
 
     def summary(self):
-        pass
-
-
-class DLTrainingWrapper(metaclass=ABCMeta):
-    def __init__(self, setting: DLSetting):
-        self.setting = setting
-    
-    @abstractmethod
-    def train(self):
-        pass
-
-    def validation(self):
-        pass
-        
-class PyTorchLightningWrapper(DLTrainingWrapper):
-    def __init__(self, setting: DLSetting):
-        super().__init__(setting)
-        # PyTorch Lightning-specific initialization
-
-    def train(self):
-        # Use PyTorch Lightning's Trainer to train the model
-        from pytorch_lightning import Trainer
-        trainer = Trainer(...)
-        trainer.fit(self.setting.model, self.setting.data)
-
-class FlaxWrapper(DLTrainingWrapper):
-    def __init__(self, setting: DLSetting):
-        super().__init__(setting)
-        # Flax-specific initialization
-
-    def train(self):
-        # Implement training logic using Flax/JAX
-        # This might involve setting up a JAX pmap for distributed training, for example
         pass
