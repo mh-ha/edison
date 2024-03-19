@@ -45,11 +45,12 @@ class LatentGenerator(L.LightningModule):
         return loss
     
 pretrained_model = BartForConditionalGeneration.from_pretrained('facebook/bart-base')
-tokenizer = AutoTokenizer.from_pretrained('facebook/bart-base')
 autoencoder = PerceiverResampler(
     dim=1024, dim_latent=256, depth=6, dim_head=64,
     num_latents=8, max_seq_len=64, ff_mult=4, l2_normalize_latents=True
     )
+latent_generator = LatentGenerator(pretrained_model, autoencoder)
+tokenizer = AutoTokenizer.from_pretrained('facebook/bart-base')
 
 class Diffusion(L.LightningModule):
     def __init__(
