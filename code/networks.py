@@ -59,10 +59,3 @@ class Diffusion(L.LightningModule):
             ):
         super().__init__()
         self.diffusion_model = diffusion_model
-
-"""
-latent AE
-Diffusion
-각각 구축해서 각자 훈련
--> 기존 코드에 의존하지 말고 일단 내가 원하는 대로 구현부터
-"""
