@@ -82,3 +82,11 @@ train_dataset, valid_dataset = get_dataset(
     model_config,
     eval=False,
 )
+
+trainer = L.Trainer(
+    max_epochs=10,
+    gpus=1,
+    precision=16,
+    progress_bar_refresh_rate=1,
+)
+trainer.fit(latent_generator, train_dataset, valid_dataset)
