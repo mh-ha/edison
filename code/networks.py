@@ -6,30 +6,29 @@ import lightning as L
 from transformers import AutoTokenizer
 from transformers.models.bart.modeling_bart import BartForConditionalGeneration
 
-from layers import PerceiverResampler
+from layers import PerceiverAutoEncoder
+from data import get_dataset
 
 class LatentGenerator(L.LightningModule):
     def __init__(
             self,
-            pretrained_model,
-            autoencoder,
+            pretrained_model: BartForConditionalGeneration,
+            autoencoder: PerceiverAutoEncoder,
             ):
         super().__init__()
-        self.pretrained_model = pretrained_model
+        self.lm = pretrained_model
+        self.lm_encoder = pretrained_model.get_encoder()
+        self.lm_decoder = pretrained_model.get_decoder()
         self.autoencoder = autoencoder
 
     # required
     def training_step(self, batch, batch_idx):
-        x, y = batch
-        z = self.encoder(x)
-        y_hat = self.decoder(z)
-        loss = self.loss(y_hat, y)
+        x = self.lm_encoder(input_ids=batch['input_ids'], attention_mask=batch['attention_mask'])
+        x = self.autoencoder.encode(x, attention_mask=batch['attention_mask'])
+        x = self.autoencoder.decode(x)
+        loss = self.lm(labels=batch['labels'], encoder_outputs=x).loss
         self.log('train_loss', loss)
         return loss
-    
-    # required
-    def loss(self, y_hat, y):
-        return F.mse_loss(y_hat, y)
     
     # required
     def configure_optimizers(self):
@@ -37,20 +36,12 @@ class LatentGenerator(L.LightningModule):
     
     # optional
     def validation_step(self, batch, batch_idx):
-        x, y = batch
-        z = self.encoder(x)
-        y_hat = self.decoder(z)
-        loss = self.loss(y_hat, y)
-        self.log('val_loss', loss)
+        x = self.lm_encoder(input_ids=batch['input_ids'], attention_mask=batch['attention_mask'])
+        x = self.autoencoder.encode(x, attention_mask=batch['attention_mask'])
+        x = self.autoencoder.decode(x)
+        loss = self.lm(labels=batch['labels'], encoder_outputs=x).loss
+        self.log('train_loss', loss)
         return loss
-    
-pretrained_model = BartForConditionalGeneration.from_pretrained('facebook/bart-base')
-autoencoder = PerceiverResampler(
-    dim=1024, dim_latent=256, depth=6, dim_head=64,
-    num_latents=8, max_seq_len=64, ff_mult=4, l2_normalize_latents=True
-    )
-latent_generator = LatentGenerator(pretrained_model, autoencoder)
-tokenizer = AutoTokenizer.from_pretrained('facebook/bart-base')
 
 class Diffusion(L.LightningModule):
     def __init__(
@@ -59,3 +50,35 @@ class Diffusion(L.LightningModule):
             ):
         super().__init__()
         self.diffusion_model = diffusion_model
+
+
+
+
+enc_dec_model = 'facebook/bart-base'
+max_seq_len = 64
+dataset_name = 'roc'
+train_batch_size = 32
+
+pretrained_model = BartForConditionalGeneration.from_pretrained(enc_dec_model)
+autoencoder = PerceiverAutoEncoder(
+    dim_lm=pretrained_model.config.d_model,
+    dim_ae=64,
+    depth=3,
+    num_encoder_latents=32,
+    num_decoder_latents=32,
+    max_seq_len=max_seq_len,
+    transformer_decoder=True,
+    l2_normalize_latents=False,
+)
+latent_generator = LatentGenerator(pretrained_model, autoencoder)
+tokenizer = AutoTokenizer.from_pretrained(enc_dec_model)
+model_config = pretrained_model.config
+train_dataset, valid_dataset = get_dataset(
+    tokenizer,
+    max_seq_len,
+    dataset_name,
+    enc_dec_model,
+    train_batch_size,
+    model_config,
+    eval=False,
+)
