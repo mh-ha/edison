@@ -1,5 +1,5 @@
 from dataclasses import dataclass
-import dataset_utils.text_dataset as text_dataset
+from dataset_utils import text_dataset
 
 @dataclass
 class Args:
