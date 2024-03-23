@@ -43,9 +43,9 @@ class AbsolutePositionalEmbedding(nn.Module):
         self.emb = nn.Embedding(max_seq_len, dim)
 
     def l2_norm(self, t, groups=1):
-        t = rearrange(t, '...(gd) -> ...gd', g = groups)
+        t = rearrange(t, '... (g d) -> ... g d', g = groups)
         t = F.normalize(t, p = 2, dim = -1)
-        return rearrange(t, '...gd -> ...(gd)')
+        return rearrange(t, '... g d -> ... (g d)')
 
     def forward(self, x, pos = None):
         seq_len = x.shape[1]
@@ -92,13 +92,13 @@ class Attention(nn.Module):
         x = self.norm(x)
 
         qkv = (self.to_q(x), self.to_k(x), self.to_v(x))
-        q, k, v = map(lambda t: rearrange(t, 'bn(hd) -> bhnd', h=h), qkv)
+        q, k, v = map(lambda t: rearrange(t, 'b n (h d) -> b h n d', h=h), qkv)
 
-        sim = einsum('bhid, bhjd -> bhij', self.query_norm(q)*self.scale, self.key_norm(k))
+        sim = einsum('b h i d, b h j d -> b h i j', self.query_norm(q)*self.scale, self.key_norm(k))
         attn = sim.softmax(dim=-1)
 
-        out = einsum('bhij, bhjd -> bhid', attn, v)
-        out = rearrange(out, 'bhnd -> bn(hd)')
+        out = einsum('b h i j, b h j d -> b h i d', attn, v)
+        out = rearrange(out, 'b h n d -> b n (h d)')
         return self.to_out(out)
     
 
@@ -146,23 +146,23 @@ class PerceiverAttention(nn.Module):
             kv_input = torch.cat([self.to_kv(x), self.latent_to_kv(latents)], dim=1)
         else:
             kv_input = torch.cat([self.to_kv(x), self.to_kv(latents)], dim=1)
-        k, v = rearrange(kv_input, 'bn(split d) -> split bnd', split=2)
+        k, v = rearrange(kv_input, 'b n (split d) -> split b n d', split=2)
         q, k, v = map(lambda t: rearrange(
-            t, 'bn(hd) -> bhnd', h=h), (q, k, v))
+            t, 'b n (h d) -> b h n d', h=h), (q, k, v))
 
         # similarities and masking
-        sim = einsum('...id, ...jd -> ...ij', self.query_norm(q)*self.scale, self.key_norm(k))
+        sim = einsum('... i d, ... j d -> ... i j', self.query_norm(q)*self.scale, self.key_norm(k))
         if exists(mask):
             max_neg_value = -torch.finfo(sim.dtype).max
             mask = F.pad(mask, (0, latents.shape[-2]), value=True)
-            mask = rearrange(mask, 'bj -> b11j')
+            mask = rearrange(mask, 'b j -> b 1 1 j')
             sim = sim.masked_fill(~mask, max_neg_value)
 
         # attention
         attn = sim.softmax(dim=-1, dtype=torch.float32)
         attn = attn.to(sim.dtype)
-        out = einsum('...ij, ...jd -> ...id', attn, v)
-        out = rearrange(out, 'bhnd -> bn(hd)', h=h)
+        out = einsum('... i j, ... j d -> ... i d', attn, v)
+        out = rearrange(out, 'b h n d -> b n (h d)', h=h)
         
         return self.to_out(out)
 
@@ -199,7 +199,7 @@ class PerceiverResampler(nn.Module):
     def forward(self, x, mask=None):
         pos_emb = self.pos_emb(x)
         x_with_pos = x + pos_emb
-        latents = repeat(self.latents, 'nd -> bnd', b=x.shape[0])
+        latents = repeat(self.latents, 'n d -> b n d', b=x.shape[0])
 
         for attn, ff in self.layers:
             latents = attn(x_with_pos, latents, mask=mask) + latents
