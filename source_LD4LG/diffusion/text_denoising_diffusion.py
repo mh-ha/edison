@@ -512,16 +512,15 @@ class GaussianDiffusion(nn.Module):
         assert l == max_seq_len, f'length must be {self.max_seq_len}'
         
         # sample random times
+        times = torch.zeros((batch,), device = device).float().uniform_(0, 1.)  # shape = (batch_size,)
 
-        times = torch.zeros((batch,), device = device).float().uniform_(0, 1.)
         # noise sample
+        noise = torch.randn_like(txt_latent)  # shape = (batch_size, max_seq_len, latent_dim)
 
-        noise = torch.randn_like(txt_latent)
+        alpha = self.train_schedule(times)  # shape = (batch_size,)
+        alpha = right_pad_dims_to(txt_latent, alpha)  # shape = (batch_size, 1, 1)
 
-        alpha = self.train_schedule(times)
-        alpha = right_pad_dims_to(txt_latent, alpha)
-
-        z_t = alpha.sqrt() * txt_latent + (1-alpha).sqrt() * noise
+        z_t = alpha.sqrt() * txt_latent + (1-alpha).sqrt() * noise  # shape = (batch_size, max_seq_len, latent_dim)
 
         # Perform unconditional generation with some probability
         if self.diffusion_model.class_conditional and self.diffusion_model.class_unconditional_prob > 0:
@@ -537,10 +536,8 @@ class GaussianDiffusion(nn.Module):
                 self_cond = model_output.pred_x_start.detach()
                 if self.l2_normalize:
                     self_cond = F.normalize(self_cond, dim=-1) * math.sqrt(self_cond.shape[-1])
-              
 
         # predict and take gradient step
-
         predictions = self.diffusion_model_predictions(z_t, mask, times, x_self_cond=self_cond, class_id=class_id, seq2seq_cond=seq2seq_cond, seq2seq_mask=seq2seq_mask)          
         if self.objective == 'pred_x0':
             target = txt_latent
@@ -561,8 +558,8 @@ class GaussianDiffusion(nn.Module):
             return loss.mean(), predictions.pred_x_start
         return loss.mean()
 
-# trainer class
 
+# trainer class
 class Trainer(object):
     def __init__(
         self,

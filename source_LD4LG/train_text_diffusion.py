@@ -91,6 +91,18 @@ def main(args):
         mixed_precision = args.mixed_precision,
     )
 
+    data = {
+            'step': trainer.step,
+            'model': trainer.accelerator.get_state_dict(trainer.diffusion),
+            'opt': trainer.opt.state_dict(),
+            'ema': trainer.ema.state_dict(),
+            # 'scaler': trainer.accelerator.scaler.state_dict() if exists(trainer.accelerator.scaler) else None,
+            'scheduler': trainer.lr_scheduler.state_dict(),
+        }
+    torch.save(data, str(trainer.results_folder / f'model.pt'))
+    torch.save(diffusion, str(trainer.results_folder / f'diffusion.pt'))
+    print("saved.")
+
     if args.eval:
         trainer.load(args.resume_dir, best=trainer.diffusion.diffusion_model.seq2seq)
         if trainer.diffusion.diffusion_model.seq2seq:
