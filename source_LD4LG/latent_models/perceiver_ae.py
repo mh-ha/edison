@@ -134,26 +134,31 @@ class PerceiverAttention(nn.Module):
         )
 
     def forward(self, x, latents, mask=None):
-        x = self.norm(x)
-        latents = self.norm_latents(latents)
+        # x, latent normalization
+        x = self.norm(x)  # 1: (batch, max_seq_len, dim) -> (batch, max_seq_len, dim)
+        latents = self.norm_latents(latents)  # 2 : (batch, num_latents, dim_latent) -> (batch, num_latents, dim_latent)
 
         b, h = x.shape[0], self.heads
 
-        q = self.to_q(latents)
+        # latents: latent_dim -> inner_dim
+        q = self.to_q(latents)  # 3: (batch, num_latents, dim_latent) -> (batch, num_latents, inner_dim(=max(dim, dim_latent)))
         # the paper differs from Perceiver in which they also concat the key / values derived from the latents to be attended to
         if exists(self.latent_to_kv):
-            kv_input = torch.cat([self.to_kv(x), self.latent_to_kv(latents)], dim=1)
+            # concat kv(max_seq_len), latents(num_latents) along the sequence dimension (dim=1)
+            kv_input = torch.cat([self.to_kv(x), self.latent_to_kv(latents)], dim=1)  # 4, 5: concat kv(max_seq_len), latents(num_latents) along the sequence dimension
         else:
             kv_input = torch.cat([self.to_kv(x), self.to_kv(latents)], dim=1)
-        k, v = rearrange(kv_input, 'b n (split d) -> split b n d', split=2)
+        # split kv_input into k, v (batch, max_seq_len + num_latents, inner_dim)
+        k, v = rearrange(kv_input, 'b n (split d) -> split b n d', split=2)  # (batch, max_seq_len + num_latents, inner_dim*2) -> (2, batch, max_seq_len + num_latents, inner_dim)
 
+        # split q, k, v into heads(=inner_dim/dim_head)
         q, k, v = map(lambda t: rearrange(
-            t, 'b n (h d) -> b h n d', h=h), (q, k, v))
+            t, 'b n (h d) -> b h n d', h=h), (q, k, v))  # (batch, (num_latents) or (max_seq_len + num_latents), inner_dim) -> (batch, heads, (num_latents) or (max_seq_len + num_latents), dim_head)
 
         # similarities and masking
-
+        # sim=(q@k)/sqrt(dim_head) (batch, heads, num_latents, max_seq_len + num_latents)
         sim = einsum('... i d, ... j d  -> ... i j',
-                     self.query_norm(q) * self.scale, self.key_norm(k))
+                     self.query_norm(q) * self.scale, self.key_norm(k))  # 6, 7: (batch, heads, num_latents, dim_head) @ (batch, heads, max_seq_len + num_latents, dim_head) -> (batch, heads, num_latents, max_seq_len + num_latents)
 
         if exists(mask):
             max_neg_value = -torch.finfo(sim.dtype).max
@@ -161,14 +166,15 @@ class PerceiverAttention(nn.Module):
             mask = rearrange(mask, 'b j -> b 1 1 j')
             sim = sim.masked_fill(~mask, max_neg_value)
 
-        # attention
-
+        # softmax and multiply with values
         attn = sim.softmax(dim=-1, dtype=torch.float32)
         attn = attn.to(sim.dtype)
-
-        out = einsum('... i j, ... j d -> ... i d', attn, v)
-        out = rearrange(out, 'b h n d -> b n (h d)', h=h)
-        return self.to_out(out)
+        # out = attn@v (batch, heads, num_latents, dim_head)
+        out = einsum('... i j, ... j d -> ... i d', attn, v)  # (batch, heads, num_latents, max_seq_len + num_latents) * (batch, heads, max_seq_len + num_latents, dim_head) -> (batch, heads, num_latents, dim_head)
+        # merge heads
+        out = rearrange(out, 'b h n d -> b n (h d)', h=h)  # (batch, heads, num_latents, dim_head) -> (batch, num_latents, inner_dim)
+        # linear projection (batch, num_latents, dim_latent)
+        return self.to_out(out)  # 8: (batch, num_latents, inner_dim) -> (batch, num_latents, dim_latent)
 
 
 class PerceiverResampler(nn.Module):

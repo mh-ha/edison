@@ -30,15 +30,15 @@ def main(args):
         mixed_precision=args.mixed_precision,
     )
     
-    data = {
-            'step': trainer.step,
-            'model': trainer.accelerator.get_state_dict(trainer.lm),
-            'opt': trainer.opt.state_dict(),
-            # 'scaler': trainer.accelerator.scaler.state_dict() if exists(trainer.accelerator.scaler) else None
-        }
-    torch.save(data, str(trainer.results_folder / f'model.pt'))
-    torch.save(trainer.lm, str(trainer.results_folder / f'model_full.pt'))
-    print('saved.')
+    # data = {
+    #         'step': trainer.step,
+    #         'model': trainer.accelerator.get_state_dict(trainer.lm),
+    #         'opt': trainer.opt.state_dict(),
+    #         # 'scaler': trainer.accelerator.scaler.state_dict() if exists(trainer.accelerator.scaler) else None
+    #     }
+    # torch.save(data, str(trainer.results_folder / f'model.pt'))
+    # torch.save(trainer.lm, str(trainer.results_folder / f'model_full.pt'))
+    # print('saved.')
     
     if args.resume_dir:
         trainer.load(args.resume_dir, resume_training=args.resume_training)

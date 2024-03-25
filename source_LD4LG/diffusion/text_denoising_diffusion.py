@@ -396,10 +396,9 @@ class GaussianDiffusion(nn.Module):
 
         for time, time_next in tqdm(time_pairs, desc = 'sampling loop time step', total = self.sampling_timesteps):
             # get predicted x0
-
             model_output = self.diffusion_model_predictions(z_t, mask, time, class_id=class_id, x_self_cond=x_start, seq2seq_cond=seq2seq_cond, seq2seq_mask=seq2seq_mask, sampling=True, cls_free_guidance=cls_free_guidance, l2_normalize=l2_normalize)
+            
             # get alpha sigma of time and next time
-
             alpha = self.sampling_schedule(time)
             alpha_next = self.sampling_schedule(time_next)
             alpha, alpha_next = map(partial(right_pad_dims_to, z_t), (alpha, alpha_next))
@@ -407,7 +406,6 @@ class GaussianDiffusion(nn.Module):
             alpha_now = alpha/alpha_next
 
             # # calculate x0 and noise
-
             x_start = model_output.pred_x_start
 
             eps = model_output.pred_noise
@@ -417,7 +415,6 @@ class GaussianDiffusion(nn.Module):
                 continue         
             
             # get noise
-
             noise = torch.randn_like(z_t)
             
             z_t = 1/alpha_now.sqrt() * (z_t - (1-alpha_now)/(1-alpha).sqrt() * eps) + torch.sqrt(1 - alpha_now) * noise
