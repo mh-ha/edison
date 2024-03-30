@@ -48,6 +48,27 @@ FLOW:
         - 계산 방식은 generator와 같음
             prediction head만 바꿔서 사용 (+ task에 맞는 loss)
 """
+import torch
+from torch import nn
+
+class InputEmbedding(nn.module):
+    def __init__(self, config):
+        # embedding
+            # num_embedding_dim, num_hidden_dim, padding_idx
+        pass
+
+class BaseNetwork(nn.Module):
+    def __init__(self, config):
+        # attention
+            # num_heads, num_head_dim, num_hidden_dim
+            # query_layer
+            # key_layer
+            # value_layer
+            # (batch, seq_len, num_hidden_dim) -> (batch, num_heads, seq_len, num_hidden_dim//num_heads)
+        # feedforward
+        # layernorm
+        pass
+
 
 
 # class Generator
@@ -57,7 +78,6 @@ FLOW:
 
 
 
-# class DeBERTa
 
 
 
