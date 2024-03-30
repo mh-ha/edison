@@ -2,15 +2,12 @@
 
 
 
-
-
-# class: attention
-
-
-# class: DisentangledSelfAttention
+# class DisentangledSelfAttention
 # option: pre-, post-layernorm
 
-# class: PerceiverAttention
+
+
+# class PerceiverAttention
 # option: pre-, post-layernorm
 
 
