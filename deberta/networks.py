@@ -49,17 +49,24 @@ FLOW:
             prediction head만 바꿔서 사용 (+ task에 맞는 loss)
 """
 import torch
-from torch import nn
+from torch import nn, Tensor
 from einops import rearrange, einsum, reduce, repeat
 
 from .config import Config
+from .attentions import TransformerBlock
 from .utils import MaskedLayerNorm
 
-class InputEmbedding(nn.module):
+class InputEmbedding(nn.Module):
     def __init__(self, config:Config):
+        super().__init__()
         # embedding
             # embedding_dim, hidden_dim, padding_idx
         self.config = config
+        self.embedding_dim = config.embedding_dim
+        self.hidden_dim = config.hidden_dim
+        self.padding_idx = config.padding_idx
+        self.position_biased_input = config.position_biased_input
+
         self.word_embedding_layer = nn.Embedding(
             config.vocab_size,
             config.embedding_dim,
@@ -69,7 +76,8 @@ class InputEmbedding(nn.module):
             config.max_seq_len,
             config.embedding_dim,
         )
-        self.layernorm = nn.LayerNorm(config.hidden_dim)
+        self.layernorm = nn.LayerNorm(config.hidden_dim, eps=config.layernorm_eps)
+
         if config.embedding_dim != config.hidden_dim:
             self.projection = nn.Linear(config.embedding_dim, config.hidden_dim, bias=False)
 
@@ -80,6 +88,7 @@ class InputEmbedding(nn.module):
             position_ids:torch.Tensor=None  # (batch, seq_len)
         ):
         device = input_ids.device
+        input_ids = input_ids.long()
         if not position_ids:
             input_seq_len = input_ids.shape[-1]
             position_ids = torch.arange(0, input_seq_len, dtype=torch.long, device=device)
@@ -87,10 +96,10 @@ class InputEmbedding(nn.module):
         word_embeddings = self.word_embedding_layer(input_ids)
         position_embeddings = self.absolute_position_embedding_layer(position_ids)
         
-        if self.config.position_biased_input:
+        if self.position_biased_input:
             word_embeddings = word_embeddings + position_embeddings
         
-        if self.config.embedding_dim != self.config.hidden_dim:
+        if self.embedding_dim != self.hidden_dim:
             word_embeddings = self.projection(word_embeddings)
 
         word_embeddings = MaskedLayerNorm(self.layernorm, word_embeddings, attention_mask)
@@ -101,16 +110,20 @@ class InputEmbedding(nn.module):
         }
 
 class BaseNetwork(nn.Module):
-    def __init__(self, config):
-        # attention
-            # num_heads, num_head_dim, hidden_dim
-            # query_layer
-            # key_layer
-            # value_layer
-            # (batch, seq_len, num_hidden_dim) -> (batch, num_heads, seq_len, num_hidden_dim//num_heads)
-        # feedforward
-        # layernorm
-        pass
+    def __init__(self, config:Config):
+        super().__init__()
+        self.config = config
+        self.layers = nn.ModuleList([
+            TransformerBlock(config) for _ in range(config.num_hidden_layers)
+        ])
+
+    def forward(self, hidden_states:Tensor, attention_mask:Tensor=None, returns_all_hidden_states:bool=True):
+        all_hidden_states = []
+        for layer in self.layers:
+            hidden_states = layer(hidden_states, attention_mask)
+            if returns_all_hidden_states:
+                all_hidden_states.append(hidden_states)
+        return hidden_states, all_hidden_states
 
 
 
