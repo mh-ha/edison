@@ -50,17 +50,60 @@ FLOW:
 """
 import torch
 from torch import nn
+from einops import rearrange, einsum, reduce, repeat
+
+from .config import Config
+from .utils import MaskedLayerNorm
 
 class InputEmbedding(nn.module):
-    def __init__(self, config):
+    def __init__(self, config:Config):
         # embedding
-            # num_embedding_dim, num_hidden_dim, padding_idx
-        pass
+            # embedding_dim, hidden_dim, padding_idx
+        self.config = config
+        self.word_embedding_layer = nn.Embedding(
+            config.vocab_size,
+            config.embedding_dim,
+            config.padding_idx,
+        )
+        self.absolute_position_embedding_layer = nn.Embedding(
+            config.max_seq_len,
+            config.embedding_dim,
+        )
+        self.layernorm = nn.LayerNorm(config.hidden_dim)
+        if config.embedding_dim != config.hidden_dim:
+            self.projection = nn.Linear(config.embedding_dim, config.hidden_dim, bias=False)
+
+    def forward(
+            self,
+            input_ids:torch.Tensor,  # (batch, seq_len)
+            attention_mask:torch.Tensor=None,  # (batch, seq_len)
+            position_ids:torch.Tensor=None  # (batch, seq_len)
+        ):
+        device = input_ids.device
+        if not position_ids:
+            input_seq_len = input_ids.shape[-1]
+            position_ids = torch.arange(0, input_seq_len, dtype=torch.long, device=device)
+            position_ids = repeat(position_ids, 'n -> b n', b=input_ids.shape[0])
+        word_embeddings = self.word_embedding_layer(input_ids)
+        position_embeddings = self.absolute_position_embedding_layer(position_ids)
+        
+        if self.config.position_biased_input:
+            word_embeddings = word_embeddings + position_embeddings
+        
+        if self.config.embedding_dim != self.config.hidden_dim:
+            word_embeddings = self.projection(word_embeddings)
+
+        word_embeddings = MaskedLayerNorm(self.layernorm, word_embeddings, attention_mask)
+
+        return {
+        'embeddings': word_embeddings,  # (batch, seq_len, hidden_dim)
+        'position_embeddings': position_embeddings  # (batch, seq_len, embedding_dim)
+        }
 
 class BaseNetwork(nn.Module):
     def __init__(self, config):
         # attention
-            # num_heads, num_head_dim, num_hidden_dim
+            # num_heads, num_head_dim, hidden_dim
             # query_layer
             # key_layer
             # value_layer
