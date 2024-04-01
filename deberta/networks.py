@@ -190,12 +190,10 @@ class Generator(nn.Module):
             return output
 
     def _loss_fn(self, logits:Tensor, labels:Tensor, labels_mask:Tensor):
-        loss_fn = nn.CrossEntropyLoss()
-        print(logits.shape, labels.shape, labels_mask.shape)
-        logits = logits[labels_mask>0]
-        labels = labels[labels_mask>0]
-        print(logits.shape, labels.shape, labels_mask.shape)
-        return loss_fn(rearrange(logits, 'b n v -> (b n) v'), rearrange(labels, 'b n -> (b n)'))
+        loss_fn = nn.CrossEntropyLoss(reduction='none')
+        logits = logits[labels_mask>0].view(-1, self.config.vocab_size)
+        labels = labels[labels_mask>0].view(-1).to(torch.long)
+        return loss_fn(logits, labels)
 
 
 class ReplacedTokenDiscriminatorHead(nn.Module):
@@ -245,10 +243,10 @@ class Discriminator(nn.Module):
             return output
 
     def _loss_fn(self, logits:Tensor, labels:Tensor, labels_mask:Tensor):
-        loss_fn = nn.BCEWithLogitsLoss()
-        logits = logits[labels_mask]
-        labels = labels[labels_mask]
-        return loss_fn(rearrange(logits, 'b n 1 -> (b n)'), rearrange(labels, 'b n -> (b n)'))
+        loss_fn = nn.BCEWithLogitsLoss(reduction='none')
+        logits = logits[labels_mask>0].view(-1)
+        labels = labels[labels_mask>0].view(-1).to(logits)
+        return loss_fn(logits, labels)
 
 
 
