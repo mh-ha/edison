@@ -191,8 +191,10 @@ class Generator(nn.Module):
 
     def _loss_fn(self, logits:Tensor, labels:Tensor, labels_mask:Tensor):
         loss_fn = nn.CrossEntropyLoss()
-        logits = logits[labels_mask]
-        labels = labels[labels_mask]
+        print(logits.shape, labels.shape, labels_mask.shape)
+        logits = logits[labels_mask>0]
+        labels = labels[labels_mask>0]
+        print(logits.shape, labels.shape, labels_mask.shape)
         return loss_fn(rearrange(logits, 'b n v -> (b n) v'), rearrange(labels, 'b n -> (b n)'))
 
 
