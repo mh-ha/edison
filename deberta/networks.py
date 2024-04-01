@@ -50,6 +50,7 @@ FLOW:
 """
 import torch
 from torch import nn, Tensor
+from torch import functional as F
 from einops import rearrange, einsum, reduce, repeat
 
 from .config import Config
@@ -77,7 +78,6 @@ class InputEmbedding(nn.Module):
             config.embedding_dim,
         )
         self.layernorm = nn.LayerNorm(config.hidden_dim, eps=config.layernorm_eps)
-
         if config.embedding_dim != config.hidden_dim:
             self.projection = nn.Linear(config.embedding_dim, config.hidden_dim, bias=False)
 
@@ -98,16 +98,15 @@ class InputEmbedding(nn.Module):
         
         if self.position_biased_input:
             word_embeddings = word_embeddings + position_embeddings
-        
         if self.embedding_dim != self.hidden_dim:
             word_embeddings = self.projection(word_embeddings)
-
         word_embeddings = MaskedLayerNorm(self.layernorm, word_embeddings, attention_mask)
 
         return {
         'embeddings': word_embeddings,  # (batch, seq_len, hidden_dim)
         'position_embeddings': position_embeddings  # (batch, seq_len, embedding_dim)
         }
+
 
 class BaseNetwork(nn.Module):
     def __init__(self, config:Config):
@@ -126,8 +125,75 @@ class BaseNetwork(nn.Module):
         return hidden_states, all_hidden_states
 
 
+class EnhancedMaskDecoder(nn.Module):
+    def __init__(self, config:Config):
+        super().__init__()
+        self.config = config
+        
+    def forward(
+            self,
+            last_encoder_layer:nn.Module,
+            last_hidden_states:Tensor,
+            absolute_position_embeddings:Tensor,
+        ):
+        hidden_states = last_hidden_states + absolute_position_embeddings
+        for _ in range(2):
+            hidden_states = last_encoder_layer(last_hidden_states, q_hidden_states=hidden_states)
+        return hidden_states
 
-# class Generator
+
+class MaskedLanguageModelHead(nn.Module):
+    def __init__(self, config:Config):
+        super().__init__()
+        self.config = config
+        self.dense = nn.Linear(config.hidden_dim, config.embedding_dim)
+        self.activation = nn.GELU()
+        self.layer_norm = nn.LayerNorm(config.embedding_dim, eps=config.layernorm_eps)
+        self.bias = nn.Parameter(torch.zeros(config.vocab_size))
+    
+    def forward(self, hidden_states:Tensor, word_embedding_weights:Tensor):
+        hidden_states = self.dense(hidden_states)
+        hidden_states = self.activation(hidden_states)
+        hidden_states = self.layer_norm(hidden_states)
+        logits = einsum(hidden_states, word_embedding_weights, 'b n d, v d -> b n v') + self.bias
+        return logits
+
+
+
+
+class Generator(nn.Module):
+    def __init__(self, config:Config):
+        super().__init__()
+        self.config = config
+        self.input_embedding = InputEmbedding(config)
+        self.encoder = BaseNetwork(config)
+        self.enhanced_mask_decoder = EnhancedMaskDecoder(config)
+        self.head = MaskedLanguageModelHead(config)
+
+    def forward(
+            self,
+            input_ids:Tensor,
+            attention_mask:Tensor=None,
+            position_ids:Tensor=None,
+            returns_all_hidden_states:bool=True,
+            labels:Tensor=None,
+            labels_mask:Tensor=None,
+        ):
+        input_embeddings = self.input_embedding(input_ids, attention_mask, position_ids)
+        hidden_states, all_hidden_states = self.encoder(input_embeddings['embeddings'], attention_mask, returns_all_hidden_states)
+        hidden_states = self.enhanced_mask_decoder(self.encoder.layers[-1], all_hidden_states[-2], input_embeddings['position_embeddings'])
+        output = self.head(hidden_states, self.input_embedding.word_embedding_layer.weight)
+        if labels is not None:
+            loss = self._loss_fn(output, labels, labels_mask)
+            return output, loss
+        else:
+            return output
+
+    def _loss_fn(self, logits:Tensor, labels:Tensor, labels_mask:Tensor):
+        loss_fn = nn.CrossEntropyLoss()
+        logits = logits[labels_mask]
+        labels = labels[labels_mask]
+        return loss_fn(rearrange(logits, 'b n v -> (b n) v'), rearrange(labels, 'b n -> (b n)'))
 
 
 # class Discriminator
