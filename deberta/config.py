@@ -7,7 +7,7 @@ class Config:
     max_seq_len:int
     padding_idx:int
     vocab_size:int
-    position_biased_input:bool
+    absolute_position_biased_input:bool
     num_heads:int
     num_head_dim:int
     layernorm_eps:float

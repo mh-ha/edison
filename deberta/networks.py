@@ -66,7 +66,7 @@ class InputEmbedding(nn.Module):
         self.embedding_dim = config.embedding_dim
         self.hidden_dim = config.hidden_dim
         self.padding_idx = config.padding_idx
-        self.position_biased_input = config.position_biased_input
+        self.absolute_position_biased_input = config.absolute_position_biased_input
 
         self.word_embedding_layer = nn.Embedding(
             config.vocab_size,
@@ -79,7 +79,8 @@ class InputEmbedding(nn.Module):
         )
         self.layernorm = nn.LayerNorm(config.hidden_dim, eps=config.layernorm_eps)
         if config.embedding_dim != config.hidden_dim:
-            self.projection = nn.Linear(config.embedding_dim, config.hidden_dim, bias=False)
+            self.word_projection = nn.Linear(config.embedding_dim, config.hidden_dim, bias=False)
+            self.position_projection = nn.Linear(config.embedding_dim, config.hidden_dim, bias=False)
 
     def forward(
             self,
@@ -96,10 +97,11 @@ class InputEmbedding(nn.Module):
         word_embeddings = self.word_embedding_layer(input_ids)
         position_embeddings = self.absolute_position_embedding_layer(position_ids)
         
-        if self.position_biased_input:
+        if self.absolute_position_biased_input:
             word_embeddings = word_embeddings + position_embeddings
         if self.embedding_dim != self.hidden_dim:
-            word_embeddings = self.projection(word_embeddings)
+            word_embeddings = self.word_projection(word_embeddings)
+            position_embeddings = self.position_projection(position_embeddings)
         word_embeddings = MaskedLayerNorm(self.layernorm, word_embeddings, attention_mask)
 
         return {
@@ -159,8 +161,6 @@ class MaskedLanguageModelHead(nn.Module):
         return logits
 
 
-
-
 class Generator(nn.Module):
     def __init__(self, config:Config):
         super().__init__()
@@ -196,8 +196,57 @@ class Generator(nn.Module):
         return loss_fn(rearrange(logits, 'b n v -> (b n) v'), rearrange(labels, 'b n -> (b n)'))
 
 
-# class Discriminator
+class ReplacedTokenDiscriminatorHead(nn.Module):
+    def __init__(self, config:Config):
+        super().__init__()
+        self.config = config
+        self.dense = nn.Linear(config.hidden_dim, config.hidden_dim)
+        self.activation = nn.GELU()
+        self.layernorm = nn.LayerNorm(config.hidden_dim, eps=config.layernorm_eps)
+        self.classifier = nn.Linear(config.hidden_dim, 1)
+    
+    def forward(self, hidden_states:Tensor):
+        hidden_states = self.dense(hidden_states)  # (batch, seq_len, hidden_dim)
+        hidden_states = self.activation(hidden_states)
+        hidden_states = self.layernorm(hidden_states)
+        logits = self.classifier(hidden_states)
+        return logits  # (batch, seq_len, 1)
 
+
+
+class Discriminator(nn.Module):
+    def __init__(self, config:Config):
+        super().__init__()
+        self.config = config
+        self.input_embedding = InputEmbedding(config)
+        self.encoder = BaseNetwork(config)
+        self.enhanced_mask_decoder = EnhancedMaskDecoder(config)
+        self.head = ReplacedTokenDiscriminatorHead(config)
+
+    def forward(
+            self,
+            input_ids:Tensor,
+            attention_mask:Tensor=None,
+            position_ids:Tensor=None,
+            returns_all_hidden_states:bool=True,
+            labels:Tensor=None,
+            labels_mask:Tensor=None,
+        ):
+        input_embeddings = self.input_embedding(input_ids, attention_mask, position_ids)
+        hidden_states, all_hidden_states = self.encoder(input_embeddings['embeddings'], attention_mask, returns_all_hidden_states)
+        hidden_states = self.enhanced_mask_decoder(self.encoder.layers[-1], all_hidden_states[-2], input_embeddings['position_embeddings'])
+        output = self.head(hidden_states)
+        if labels is not None:
+            loss = self._loss_fn(output, labels, labels_mask)
+            return output, loss
+        else:
+            return output
+
+    def _loss_fn(self, logits:Tensor, labels:Tensor, labels_mask:Tensor):
+        loss_fn = nn.BCEWithLogitsLoss()
+        logits = logits[labels_mask]
+        labels = labels[labels_mask]
+        return loss_fn(rearrange(logits, 'b n 1 -> (b n)'), rearrange(labels, 'b n -> (b n)'))
 
 
 
