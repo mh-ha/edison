@@ -33,7 +33,7 @@ class DisentangledSelfAttention(nn.Module):
         self.num_head_dim = config.num_head_dim
         self.num_heads = config.num_heads
         self.hidden_dim = config.hidden_dim
-        self.scale = 1.0 / (self.num_head_dim ** 0.5)
+        self.scale = 1.0 / ((self.num_head_dim * 3) ** 0.5)
 
         # relative position embedding: position generator, position embedding weights(or uses embedding forward)
         self.relative_position_embedding = RelativePositionEmbedding(config)
