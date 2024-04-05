@@ -213,7 +213,6 @@ class ReplacedTokenDiscriminatorHead(nn.Module):
         return logits  # (batch, seq_len, 1)
 
 
-
 class Discriminator(nn.Module):
     def __init__(self, config:Config):
         super().__init__()
