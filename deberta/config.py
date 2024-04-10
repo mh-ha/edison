@@ -13,3 +13,4 @@ class Config:
     layernorm_eps:float
     hidden_dropout_prob:float
     num_hidden_layers:int
+    device:str
