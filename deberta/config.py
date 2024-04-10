@@ -14,3 +14,5 @@ class Config:
     hidden_dropout_prob:float
     num_hidden_layers:int
     device:str
+    mask_lm_prob:float = 0.15
+    max_preds_per_seq:int = None
