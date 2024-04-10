@@ -28,15 +28,13 @@ class Masker:
         tokens = self._truncate_tokens(tokens, self.config.max_seq_len-2)
         tokens = self._add_eos_bos(tokens)
         masked_tokens, target_labels = self._generate_masked_tokens(tokens, rng, **kwargs)
-        original_inputs_ids = self.tokenizer(text, add_special_tokens=True)['input_ids']
+        original_inputs_ids = self.tokenizer(text, add_special_tokens=True, return_tensors='pt')['input_ids']
         masked_input_ids = self.tokenizer.convert_tokens_to_ids(masked_tokens)
-        # add special tokens
-        target_labels
+        masked_input_ids = torch.tensor(masked_input_ids)
         output = {
-            'input_ids': masked_input_ids,
-            'attention_mask': [1]*len(masked_input_ids),
-            'position_ids': list(range(len(masked_input_ids))),
-            'labels': target_labels,
+            'input_ids': masked_input_ids.unsqueeze(0),
+            'attention_mask': torch.ones_like(masked_input_ids).unsqueeze(0),
+            'labels': torch.tensor(target_labels).unsqueeze(0),
             'original_input_ids': original_inputs_ids,
         }
         return output
@@ -76,6 +74,8 @@ class ReplaceTaskData:
     def get_discriminator_inputs(self, masked_data, logits, is_stochastic=False, rng=random, **kwargs):
         masked_input_ids = self._replace_masked_tokens(masked_data, logits, is_stochastic, **kwargs)
         masked_data['input_ids'] = masked_input_ids
+        new_labels = self._check_labels(masked_data)
+        masked_data['labels'] = new_labels
         return masked_data
     
     def _replace_masked_tokens(self, masked_data, logits, is_stochastic=False, rng=random, **kwargs):
@@ -85,11 +85,15 @@ class ReplaceTaskData:
             sampled_ids = torch.multinomial(probs, num_samples=1).squeeze(-1)
         else:
             sampled_ids = torch.argmax(logits, dim=-1)
-        print(sampled_ids.shape)
         masked_input_ids = torch.where(masked_data['labels'] > 0, sampled_ids, masked_input_ids)
         return masked_input_ids
 
-
+    def _check_labels(self, masked_data):
+        masked_input_ids = masked_data['input_ids']
+        labels = masked_data['labels']
+        new_labels = torch.zeros_like(labels)
+        new_labels = torch.where(labels > 0, labels != masked_input_ids, new_labels)
+        return new_labels
 
 
 
