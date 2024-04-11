@@ -95,10 +95,11 @@ class InputEmbedding(nn.Module):
             attention_mask:torch.Tensor=None,  # (batch, seq_len)
             position_ids:torch.Tensor=None  # (batch, seq_len)
         ):
+        device = input_ids.device
         input_ids = input_ids.long()
         if not position_ids:
             input_seq_len = input_ids.shape[-1]
-            position_ids = torch.arange(0, input_seq_len, dtype=torch.long)
+            position_ids = torch.arange(0, input_seq_len, dtype=torch.long, device=device)
             position_ids = repeat(position_ids, 'n -> b n', b=input_ids.shape[0])
         word_embeddings = self.word_embedding_layer(input_ids)
         position_embeddings = self.absolute_position_embedding_layer(position_ids)
@@ -175,7 +176,7 @@ class Generator(nn.Module):
         self.encoder = BaseNetwork(config)
         self.enhanced_mask_decoder = EnhancedMaskDecoder(config)
         self.head = MaskedLanguageModelHead(config)
-        self.loss_fn = nn.CrossEntropyLoss(reduction='none')
+        self.loss_fn = nn.CrossEntropyLoss(reduction='mean')
 
     def forward(
             self,
@@ -226,7 +227,7 @@ class Discriminator(nn.Module):
         self.encoder = BaseNetwork(config)
         self.enhanced_mask_decoder = EnhancedMaskDecoder(config)
         self.head = ReplacedTokenDiscriminatorHead(config)
-        self.loss_fn = nn.BCEWithLogitsLoss()
+        self.loss_fn = nn.BCEWithLogitsLoss(reduction='mean')
 
     def forward(
             self,
@@ -270,10 +271,10 @@ class LM(L.LightningModule):
 
     def training_step(self, batch, batch_idx):
         # forward
-        input_ids, attention_mask, labels = batch
+        input_ids, attention_mask, labels = batch['input_ids'], batch['attention_mask'], batch['labels']
         output_gen, loss_gen = self.forward_generator(input_ids, attention_mask, labels)
         batch = self._get_discriminator_inputs(batch, output_gen, is_stochastic=True)
-        input_ids, attention_mask, labels = batch
+        input_ids, attention_mask, labels = batch['input_ids'], batch['attention_mask'], batch['labels']
         output_disc, loss_disc = self.forward_discriminator(input_ids, attention_mask, labels)
 
         # optimize
@@ -296,7 +297,7 @@ class LM(L.LightningModule):
         # log
         self.log('loss_gen', loss_gen, on_step=True, prog_bar=True)
         self.log('loss_disc', loss_disc, on_step=True, prog_bar=True)
-        return [loss_gen, loss_disc]
+        # return [loss_gen, loss_disc]
     
     def configure_optimizers(self):
         gen_optimizer = torch.optim.Adam(self.generator.parameters(), lr=self.config.learning_rate)
@@ -304,8 +305,8 @@ class LM(L.LightningModule):
         return [gen_optimizer, disc_optimizer], []
     
     def _get_discriminator_inputs(self, masked_data, logits, is_stochastic=True, **kwargs):
-        masked_input_ids = self._replace_masked_tokens(masked_data, logits, is_stochastic, **kwargs)
-        masked_data['input_ids'] = masked_input_ids
+        replaced_input_ids = self._replace_masked_tokens(masked_data, logits, is_stochastic, **kwargs)
+        masked_data['input_ids'] = replaced_input_ids
         new_labels = self._check_labels(masked_data)
         masked_data['labels'] = new_labels
         return masked_data
@@ -314,17 +315,17 @@ class LM(L.LightningModule):
         masked_input_ids = masked_data['input_ids']
         if is_stochastic:
             probs = torch.softmax(logits, dim=-1)
-            sampled_ids = torch.multinomial(probs, num_samples=1).squeeze(-1)
+            sampled_ids = torch.distributions.multinomial.Multinomial(1, probs).sample().topk(1).indices.squeeze(-1)
         else:
             sampled_ids = torch.argmax(logits, dim=-1)
-        masked_input_ids = torch.where(masked_data['labels'] > 0, sampled_ids, masked_input_ids)
-        return masked_input_ids
+        replaced_input_ids = torch.where(masked_data['labels'] > 0, sampled_ids, masked_input_ids)
+        return replaced_input_ids
 
     def _check_labels(self, masked_data):
-        masked_input_ids = masked_data['input_ids']
+        replaced_input_ids = masked_data['input_ids']
         labels = masked_data['labels']
         new_labels = torch.zeros_like(labels)
-        new_labels = torch.where(labels > 0, labels != masked_input_ids, new_labels)
+        new_labels = torch.where(labels > 0, labels != replaced_input_ids, new_labels)
         return new_labels
     
 
@@ -342,20 +343,15 @@ class LMDataModule(L.LightningDataModule):
             fetch_dataset(dataset_name)
 
     def setup(self, stage='train'):
-        datasets = {dataset_name: fetch_dataset(dataset_name)['train'] for dataset_name in self.dataset_names}
-        for name, dataset in datasets.items():
+        datasets = [fetch_dataset(dataset_name)['train'] for dataset_name in self.dataset_names]
+        for idx, dataset in enumerate(datasets):
             dataset = dataset.map(
                 split_sentences,
                 batched=True,
                 num_proc=12,
                 remove_columns=dataset.column_names)
-            dataset = dataset.map(
-                partial(tokenize, max_seq_len=self.config.max_seq_len),
-                batched=True,
-                num_proc=12,
-                remove_columns=dataset.column_names)
-            datasets[name] = dataset
-        self.train_dataset = concatenate_datasets(list(datasets.values()))
+            datasets[idx] = dataset
+        self.train_dataset = concatenate_datasets(datasets)
 
     def train_dataloader(self):
         return DataLoader(
@@ -364,12 +360,12 @@ class LMDataModule(L.LightningDataModule):
             collate_fn=self.get_generator_input_collate_fn(),
             shuffle=True,
             num_workers=4,
-            pin_memory=True,
+            # pin_memory=True,
             drop_last=True,)
     
     def get_generator_input_collate_fn(self, rng=random, **kwargs):
         def preprocess_per_sample(sample):
-            tokens = self.tokenizer.convert_ids_to_tokens(sample['input_ids'])
+            tokens = self.tokenizer.convert_ids_to_tokens(sample)
             masked_tokens, target_labels = self.mask_generator.mask_tokens(tokens, rng, **kwargs)
             masked_input_ids = self.tokenizer.convert_tokens_to_ids(masked_tokens)
             output = {
@@ -378,6 +374,8 @@ class LMDataModule(L.LightningDataModule):
             }
             return output
         def collate_fn(batch):
+            batch = [sample['text'] for sample in batch]
+            batch = tokenize(batch, self.config.max_seq_len)['input_ids']
             batch = list(map(preprocess_per_sample, batch))
             batch_input_ids = {'input_ids': [x['input_ids'] for x in batch]}
             batch_labels = {'input_ids': [x['labels'] for x in batch]}

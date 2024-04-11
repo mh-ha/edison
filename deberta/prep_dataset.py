@@ -17,9 +17,9 @@ def split_sentences(samples):
         sentences += [sample[i:i+SPLIT_IDX] for i in range(0, len(sample), SPLIT_IDX)]
     return {'text': sentences}
 
-def tokenize(sentences, max_seq_len):
+def tokenize(sentences:list[str], max_seq_len):
     tokenized = TOKENIZER(
-        sentences['text'],
+        sentences,
         add_special_tokens=True,
         return_token_type_ids=False,
         return_attention_mask=False,
