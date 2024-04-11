@@ -17,6 +17,6 @@ class Config:
     mask_lm_prob:float = 0.15
     max_preds_per_seq:int = None
     learning_rate:float = 1e-4
-    batch_size:int = 8
+    batch_size:int = 4
     gradient_clip_val:float = 1.0
     gradient_clip_algorithm:str = 'norm'

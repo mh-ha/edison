@@ -360,7 +360,7 @@ class LMDataModule(L.LightningDataModule):
             collate_fn=self.get_generator_input_collate_fn(),
             shuffle=True,
             num_workers=4,
-            # pin_memory=True,
+            pin_memory=True,
             drop_last=True,)
     
     def get_generator_input_collate_fn(self, rng=random, **kwargs):
