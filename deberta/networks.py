@@ -48,21 +48,27 @@ FLOW:
         - 계산 방식은 generator와 같음
             prediction head만 바꿔서 사용 (+ task에 맞는 loss)
 """
+import random
+from functools import partial
+
 import torch
 from torch import nn, Tensor
 from torch import functional as F
+from torch.utils.data import Dataset, DataLoader
 from einops import rearrange, einsum, reduce, repeat
 import lightning as L
+from datasets import concatenate_datasets
 
 from .config import Config
 from .attentions import TransformerBlock
-from .utils import MaskedLayerNorm
+from .utils import MaskedLayerNorm, NGramMaskGenerator
+from .data import ReplaceTaskPrepare, Masker
+from .fetch_dataset import fetch_dataset
+from .prep_dataset import split_sentences, tokenize
 
 class InputEmbedding(nn.Module):
     def __init__(self, config:Config):
         super().__init__()
-        # embedding
-            # embedding_dim, hidden_dim, padding_idx
         self.config = config
         self.embedding_dim = config.embedding_dim
         self.hidden_dim = config.hidden_dim
@@ -89,11 +95,10 @@ class InputEmbedding(nn.Module):
             attention_mask:torch.Tensor=None,  # (batch, seq_len)
             position_ids:torch.Tensor=None  # (batch, seq_len)
         ):
-        device = input_ids.device
         input_ids = input_ids.long()
         if not position_ids:
             input_seq_len = input_ids.shape[-1]
-            position_ids = torch.arange(0, input_seq_len, dtype=torch.long, device=device)
+            position_ids = torch.arange(0, input_seq_len, dtype=torch.long)
             position_ids = repeat(position_ids, 'n -> b n', b=input_ids.shape[0])
         word_embeddings = self.word_embedding_layer(input_ids)
         position_embeddings = self.absolute_position_embedding_layer(position_ids)
@@ -176,8 +181,8 @@ class Generator(nn.Module):
             self,
             input_ids:Tensor,
             attention_mask:Tensor=None,
-            returns_all_hidden_states:bool=True,
             labels:Tensor=None,
+            returns_all_hidden_states:bool=True,
             **kwargs,
         ):
         input_embeddings = self.input_embedding(input_ids, attention_mask)
@@ -227,8 +232,8 @@ class Discriminator(nn.Module):
             self,
             input_ids:Tensor,
             attention_mask:Tensor=None,
-            returns_all_hidden_states:bool=True,
             labels:Tensor=None,
+            returns_all_hidden_states:bool=True,
             **kwargs,
         ):
         input_embeddings = self.input_embedding(input_ids, attention_mask)
@@ -251,9 +256,11 @@ class Discriminator(nn.Module):
 class LM(L.LightningModule):
     def __init__(self, config:Config):
         super().__init__()
+        self.save_hyperparameters("config")
         self.config = config
         self.generator = Generator(config)
         self.discriminator = Discriminator(config)
+        self.automatic_optimization = False
 
     def forward_generator(self, input_ids:Tensor, attention_mask:Tensor=None, labels:Tensor=None, **kwargs):
         return self.generator(input_ids, attention_mask, labels, **kwargs)
@@ -261,28 +268,135 @@ class LM(L.LightningModule):
     def forward_discriminator(self, input_ids:Tensor, attention_mask:Tensor=None, labels:Tensor=None, **kwargs):
         return self.discriminator(input_ids, attention_mask, labels, **kwargs)
 
-    def training_step(self, batch, batch_idx, optimizer_idx):
+    def training_step(self, batch, batch_idx):
+        # forward
         input_ids, attention_mask, labels = batch
-        if optimizer_idx == 0:
-            output, loss = self.forward_generator(input_ids, attention_mask, labels)
-        elif optimizer_idx == 1:
-            output, loss = self.forward_discriminator(input_ids, attention_mask, labels)
-        return loss
+        output_gen, loss_gen = self.forward_generator(input_ids, attention_mask, labels)
+        batch = self._get_discriminator_inputs(batch, output_gen, is_stochastic=True)
+        input_ids, attention_mask, labels = batch
+        output_disc, loss_disc = self.forward_discriminator(input_ids, attention_mask, labels)
+
+        # optimize
+        opt_gen, opt_disc = self.optimizers()
+        opt_gen.zero_grad()
+        self.manual_backward(loss_gen)
+        self.clip_gradients(
+            opt_gen,
+            gradient_clip_val=self.config.gradient_clip_val,
+            gradient_clip_algorithm=self.config.gradient_clip_algorithm)
+        opt_gen.step()
+        opt_disc.zero_grad()
+        self.manual_backward(loss_disc)
+        self.clip_gradients(
+            opt_disc,
+            gradient_clip_val=self.config.gradient_clip_val,
+            gradient_clip_algorithm=self.config.gradient_clip_algorithm)
+        opt_disc.step()
+
+        # log
+        self.log('loss_gen', loss_gen, on_step=True, prog_bar=True)
+        self.log('loss_disc', loss_disc, on_step=True, prog_bar=True)
+        return [loss_gen, loss_disc]
     
     def configure_optimizers(self):
         gen_optimizer = torch.optim.Adam(self.generator.parameters(), lr=self.config.learning_rate)
         disc_optimizer = torch.optim.Adam(self.discriminator.parameters(), lr=self.config.learning_rate)
         return [gen_optimizer, disc_optimizer], []
     
-    def validation_step(self, batch, batch_idx, optimizer_idx):
-        input_ids, attention_mask, labels = batch
-        if optimizer_idx == 0:
-            output, loss = self.forward_generator(input_ids, attention_mask, labels=labels)
-        elif optimizer_idx == 1:
-            output, loss = self.forward_discriminator(input_ids, attention_mask, labels=labels)
-        return loss
+    def _get_discriminator_inputs(self, masked_data, logits, is_stochastic=True, **kwargs):
+        masked_input_ids = self._replace_masked_tokens(masked_data, logits, is_stochastic, **kwargs)
+        masked_data['input_ids'] = masked_input_ids
+        new_labels = self._check_labels(masked_data)
+        masked_data['labels'] = new_labels
+        return masked_data
     
-    def validation_epoch_end(self, outputs):
-        avg_loss = torch.stack(outputs).mean()
-        return avg_loss
+    def _replace_masked_tokens(self, masked_data, logits, is_stochastic=True, **kwargs):
+        masked_input_ids = masked_data['input_ids']
+        if is_stochastic:
+            probs = torch.softmax(logits, dim=-1)
+            sampled_ids = torch.multinomial(probs, num_samples=1).squeeze(-1)
+        else:
+            sampled_ids = torch.argmax(logits, dim=-1)
+        masked_input_ids = torch.where(masked_data['labels'] > 0, sampled_ids, masked_input_ids)
+        return masked_input_ids
+
+    def _check_labels(self, masked_data):
+        masked_input_ids = masked_data['input_ids']
+        labels = masked_data['labels']
+        new_labels = torch.zeros_like(labels)
+        new_labels = torch.where(labels > 0, labels != masked_input_ids, new_labels)
+        return new_labels
+    
+
+class LMDataModule(L.LightningDataModule):
+    def __init__(self, config:Config, tokenizer, **kwargs):
+        super().__init__()
+        self.config = config
+        self.tokenizer = tokenizer
+        self.mask_generator = NGramMaskGenerator(tokenizer, config.mask_lm_prob, config.max_seq_len, config.max_preds_per_seq, **kwargs)
+        self.train_dataset = None
+        self.dataset_names = ['wikipedia', 'bookcorpus']
+
+    def prepare_data(self) -> None:
+        for dataset_name in self.dataset_names:
+            fetch_dataset(dataset_name)
+
+    def setup(self, stage='train'):
+        datasets = {dataset_name: fetch_dataset(dataset_name)['train'] for dataset_name in self.dataset_names}
+        for name, dataset in datasets.items():
+            dataset = dataset.map(
+                split_sentences,
+                batched=True,
+                num_proc=12,
+                remove_columns=dataset.column_names)
+            dataset = dataset.map(
+                partial(tokenize, max_seq_len=self.config.max_seq_len),
+                batched=True,
+                num_proc=12,
+                remove_columns=dataset.column_names)
+            datasets[name] = dataset
+        self.train_dataset = concatenate_datasets(list(datasets.values()))
+
+    def train_dataloader(self):
+        return DataLoader(
+            self.train_dataset,
+            batch_size=self.config.batch_size,
+            collate_fn=self.get_generator_input_collate_fn(),
+            shuffle=True,
+            num_workers=4,
+            pin_memory=True,
+            drop_last=True,)
+    
+    def get_generator_input_collate_fn(self, rng=random, **kwargs):
+        def preprocess_per_sample(sample):
+            tokens = self.tokenizer.convert_ids_to_tokens(sample['input_ids'])
+            masked_tokens, target_labels = self.mask_generator.mask_tokens(tokens, rng, **kwargs)
+            masked_input_ids = self.tokenizer.convert_tokens_to_ids(masked_tokens)
+            output = {
+                'input_ids': masked_input_ids,
+                'labels': target_labels,
+            }
+            return output
+        def collate_fn(batch):
+            batch = list(map(preprocess_per_sample, batch))
+            batch_input_ids = {'input_ids': [x['input_ids'] for x in batch]}
+            batch_labels = {'input_ids': [x['labels'] for x in batch]}
+            batch_input_ids = self.tokenizer.pad(
+                batch_input_ids,
+                padding='longest',
+                return_tensors='pt',
+                return_attention_mask=True)
+            batch_labels = self.tokenizer.pad(
+                batch_labels,
+                padding='longest',
+                return_tensors='pt',
+                return_attention_mask=False)
+            return {
+                'input_ids': batch_input_ids['input_ids'],
+                'attention_mask': batch_input_ids['attention_mask'],
+                'labels': batch_labels['input_ids'],
+            }
+        return collate_fn
+    
+    
     

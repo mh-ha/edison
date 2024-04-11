@@ -65,14 +65,30 @@ class Masker:
         return self.mask_generator.mask_tokens(tokens, rng, **kwargs)
 
 
-class ReplaceTaskData:
+class ReplaceTaskPrepare:
     def __init__(self, config, tokenizer, **kwargs):
         self.config = config
         self.tokenizer = tokenizer
         self.masker = Masker(config, tokenizer, **kwargs)
 
-    def get_generator_inputs(self, text, rng=random, **kwargs):
-        masked_data = self.masker.from_text_to_inputs(text, rng, **kwargs)
+    @staticmethod
+    def collate_fn(batch):
+        input_ids = [item['input_ids'] for item in batch]
+        attention_mask = [item['attention_mask'] for item in batch]
+        labels = [item['labels'] for item in batch]
+        return {
+            'input_ids': input_ids,
+            'attention_mask': attention_mask,
+            'labels': labels,
+        }
+
+    def get_generator_inputs(self, text=None, tokens=None, rng=random, **kwargs):
+        if text is not None:
+            masked_data = self.masker.from_text_to_inputs(text, rng, **kwargs)
+        elif tokens is not None:
+            masked_data = self.masker.from_tokens_to_inputs(tokens, rng, **kwargs)
+        else:
+            ValueError("Please provide either text or tokens")
         return masked_data
     
     def get_discriminator_inputs(self, masked_data, logits, is_stochastic=False, rng=random, **kwargs):
