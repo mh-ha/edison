@@ -23,19 +23,23 @@ class Masker:
         self.tokenizer = tokenizer
         self.mask_generator = NGramMaskGenerator(tokenizer, config.mask_lm_prob, config.max_seq_len, config.max_preds_per_seq, **kwargs)
 
-    def from_text_to_inputs(self, text, rng=random, **kwargs):
+    def from_text_to_inputs(self, text, rng=random, return_origin=False, **kwargs):
         tokens = self.tokenizer.tokenize(text)
         tokens = self._truncate_tokens(tokens, self.config.max_seq_len-2)
         tokens = self._add_eos_bos(tokens)
+        output = self.from_tokens_to_inputs(tokens, rng, **kwargs)
+        if return_origin:
+            original_inputs_ids = self.tokenizer(text, add_special_tokens=True)['input_ids']
+            output['original_input_ids'] = original_inputs_ids
+        return output
+    
+    def from_tokens_to_inputs(self, tokens, rng=random, **kwargs):
         masked_tokens, target_labels = self._generate_masked_tokens(tokens, rng, **kwargs)
-        original_inputs_ids = self.tokenizer(text, add_special_tokens=True, return_tensors='pt')['input_ids']
         masked_input_ids = self.tokenizer.convert_tokens_to_ids(masked_tokens)
-        masked_input_ids = torch.tensor(masked_input_ids)
         output = {
-            'input_ids': masked_input_ids.unsqueeze(0),
-            'attention_mask': torch.ones_like(masked_input_ids).unsqueeze(0),
-            'labels': torch.tensor(target_labels).unsqueeze(0),
-            'original_input_ids': original_inputs_ids,
+            'input_ids': masked_input_ids,
+            'attention_mask': [1]*len(masked_input_ids),
+            'labels': target_labels,
         }
         return output
     

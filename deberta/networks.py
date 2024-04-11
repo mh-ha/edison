@@ -52,6 +52,7 @@ import torch
 from torch import nn, Tensor
 from torch import functional as F
 from einops import rearrange, einsum, reduce, repeat
+import lightning as L
 
 from .config import Config
 from .attentions import TransformerBlock
@@ -169,31 +170,30 @@ class Generator(nn.Module):
         self.encoder = BaseNetwork(config)
         self.enhanced_mask_decoder = EnhancedMaskDecoder(config)
         self.head = MaskedLanguageModelHead(config)
+        self.loss_fn = nn.CrossEntropyLoss(reduction='none')
 
     def forward(
             self,
             input_ids:Tensor,
             attention_mask:Tensor=None,
-            position_ids:Tensor=None,
             returns_all_hidden_states:bool=True,
             labels:Tensor=None,
-            labels_mask:Tensor=None,
+            **kwargs,
         ):
-        input_embeddings = self.input_embedding(input_ids, attention_mask, position_ids)
+        input_embeddings = self.input_embedding(input_ids, attention_mask)
         hidden_states, all_hidden_states = self.encoder(input_embeddings['embeddings'], attention_mask, returns_all_hidden_states)
         hidden_states = self.enhanced_mask_decoder(self.encoder.layers[-1], all_hidden_states[-2], input_embeddings['position_embeddings'])
         output = self.head(hidden_states, self.input_embedding.word_embedding_layer.weight)
         if labels is not None:
-            loss = self._loss_fn(output, labels, labels_mask)
+            loss = self._loss_fn(output, labels)
             return output, loss
         else:
             return output
 
-    def _loss_fn(self, logits:Tensor, labels:Tensor, labels_mask:Tensor):
-        loss_fn = nn.CrossEntropyLoss(reduction='none')
-        logits = logits[labels_mask>0].view(-1, self.config.vocab_size)
-        labels = labels[labels_mask>0].view(-1).to(torch.long)
-        return loss_fn(logits, labels)
+    def _loss_fn(self, logits:Tensor, labels:Tensor):
+        logits = logits[labels>0].view(-1, self.config.vocab_size)
+        labels = labels[labels>0].view(-1).to(torch.long)
+        return self.loss_fn(logits, labels)
 
 
 class ReplacedTokenDiscriminatorHead(nn.Module):
@@ -221,36 +221,68 @@ class Discriminator(nn.Module):
         self.encoder = BaseNetwork(config)
         self.enhanced_mask_decoder = EnhancedMaskDecoder(config)
         self.head = ReplacedTokenDiscriminatorHead(config)
+        self.loss_fn = nn.BCEWithLogitsLoss()
 
     def forward(
             self,
             input_ids:Tensor,
             attention_mask:Tensor=None,
-            position_ids:Tensor=None,
             returns_all_hidden_states:bool=True,
             labels:Tensor=None,
-            labels_mask:Tensor=None,
+            **kwargs,
         ):
-        input_embeddings = self.input_embedding(input_ids, attention_mask, position_ids)
+        input_embeddings = self.input_embedding(input_ids, attention_mask)
         hidden_states, all_hidden_states = self.encoder(input_embeddings['embeddings'], attention_mask, returns_all_hidden_states)
         hidden_states = self.enhanced_mask_decoder(self.encoder.layers[-1], all_hidden_states[-2], input_embeddings['position_embeddings'])
         output = self.head(hidden_states)
         if labels is not None:
-            loss = self._loss_fn(output, labels, labels_mask)
+            loss = self._loss_fn(output, labels)
             return output, loss
         else:
             return output
 
-    def _loss_fn(self, logits:Tensor, labels:Tensor, labels_mask:Tensor):
-        loss_fn = nn.BCEWithLogitsLoss(reduction='none')
-        logits = logits[labels_mask>0].view(-1)
-        labels = labels[labels_mask>0].view(-1).to(logits)
-        return loss_fn(logits, labels)
+    def _loss_fn(self, logits:Tensor, labels:Tensor):
+        logits = logits.view(-1)
+        labels = labels.view(-1).to(logits)
+        return self.loss_fn(logits, labels)
 
 
 
+class LM(L.LightningModule):
+    def __init__(self, config:Config):
+        super().__init__()
+        self.config = config
+        self.generator = Generator(config)
+        self.discriminator = Discriminator(config)
 
+    def forward_generator(self, input_ids:Tensor, attention_mask:Tensor=None, labels:Tensor=None, **kwargs):
+        return self.generator(input_ids, attention_mask, labels, **kwargs)
+    
+    def forward_discriminator(self, input_ids:Tensor, attention_mask:Tensor=None, labels:Tensor=None, **kwargs):
+        return self.discriminator(input_ids, attention_mask, labels, **kwargs)
 
-
-
-
+    def training_step(self, batch, batch_idx, optimizer_idx):
+        input_ids, attention_mask, labels = batch
+        if optimizer_idx == 0:
+            output, loss = self.forward_generator(input_ids, attention_mask, labels)
+        elif optimizer_idx == 1:
+            output, loss = self.forward_discriminator(input_ids, attention_mask, labels)
+        return loss
+    
+    def configure_optimizers(self):
+        gen_optimizer = torch.optim.Adam(self.generator.parameters(), lr=self.config.learning_rate)
+        disc_optimizer = torch.optim.Adam(self.discriminator.parameters(), lr=self.config.learning_rate)
+        return [gen_optimizer, disc_optimizer], []
+    
+    def validation_step(self, batch, batch_idx, optimizer_idx):
+        input_ids, attention_mask, labels = batch
+        if optimizer_idx == 0:
+            output, loss = self.forward_generator(input_ids, attention_mask, labels=labels)
+        elif optimizer_idx == 1:
+            output, loss = self.forward_discriminator(input_ids, attention_mask, labels=labels)
+        return loss
+    
+    def validation_epoch_end(self, outputs):
+        avg_loss = torch.stack(outputs).mean()
+        return avg_loss
+    

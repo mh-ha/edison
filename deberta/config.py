@@ -16,3 +16,4 @@ class Config:
     device:str
     mask_lm_prob:float = 0.15
     max_preds_per_seq:int = None
+    learning_rate:float = 1e-4
