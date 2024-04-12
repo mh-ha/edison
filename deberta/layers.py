@@ -6,14 +6,55 @@ from .config import Config
 from .utils import MaskedLayerNorm
 
 
+class InputEmbedding(nn.Module):
+    def __init__(self, config:Config):
+        super().__init__()
+        self.config = config
+        self.embedding_dim = config.embedding_dim
+        self.hidden_dim = config.hidden_dim
+        self.padding_idx = config.padding_idx
+        self.absolute_position_biased_input = config.absolute_position_biased_input
 
+        self.word_embedding_layer = nn.Embedding(
+            config.vocab_size,
+            config.embedding_dim,
+            config.padding_idx,
+        )
+        self.absolute_position_embedding_layer = nn.Embedding(
+            config.max_seq_len,
+            config.embedding_dim,
+        )
+        self.layernorm = nn.LayerNorm(config.hidden_dim, eps=config.layernorm_eps)
+        if config.embedding_dim != config.hidden_dim:
+            self.word_projection = nn.Linear(config.embedding_dim, config.hidden_dim, bias=False)
+            self.position_projection = nn.Linear(config.embedding_dim, config.hidden_dim, bias=False)
 
+    def forward(
+            self,
+            input_ids:torch.Tensor,  # (batch, seq_len)
+            attention_mask:torch.Tensor=None,  # (batch, seq_len)
+            position_ids:torch.Tensor=None  # (batch, seq_len)
+        ):
+        device = input_ids.device
+        input_ids = input_ids.long()
+        if not position_ids:
+            input_seq_len = input_ids.shape[-1]
+            position_ids = torch.arange(0, input_seq_len, dtype=torch.long, device=device)
+            position_ids = repeat(position_ids, 'n -> b n', b=input_ids.shape[0])
+        word_embeddings = self.word_embedding_layer(input_ids)
+        position_embeddings = self.absolute_position_embedding_layer(position_ids)
+        
+        if self.absolute_position_biased_input:
+            word_embeddings = word_embeddings + position_embeddings
+        if self.embedding_dim != self.hidden_dim:
+            word_embeddings = self.word_projection(word_embeddings)
+            position_embeddings = self.position_projection(position_embeddings)
+        word_embeddings = MaskedLayerNorm(self.layernorm, word_embeddings, attention_mask)
 
-# class FeedForward
-
-
-# class BaseEmbedding
-# required: word embedding, absolute position embedding
+        return {
+        'embeddings': word_embeddings,  # (batch, seq_len, hidden_dim)
+        'position_embeddings': position_embeddings  # (batch, seq_len, embedding_dim)
+        }
 
 
 class RelativePositionEmbedding(nn.Module):
