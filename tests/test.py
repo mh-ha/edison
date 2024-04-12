@@ -7,13 +7,16 @@ from torchinfo import summary
 def arr(shape):
     return torch.randn(shape)
 
-def test_layer(layer:nn.Module, input_shape:Tensor=None, input_data:Tensor=None):
+def test_layer(layer:nn.Module, input_shape:Tensor=None, input_data:Tensor=None, device=None):
     if input_shape is None and input_data is None:
         raise ValueError("Please provide either input_shape or input_data")
     if input_data is not None:
         inputs = input_data
     elif input_shape is not None:
         inputs = torch.randn(input_shape)
+    if device is not None:
+        inputs = inputs.to(device)
+        layer = layer.to(device)
     outputs = layer(inputs)
     print(f"input shape: {inputs.shape}")
     print(f"output type: {type(outputs)}")
