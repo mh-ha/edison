@@ -365,14 +365,9 @@ class LMDataModule(L.LightningDataModule):
     
     def get_generator_input_collate_fn(self, rng=random, **kwargs):
         def preprocess_per_sample(sample):
-            # print(sample, '1')
             sample = self.tokenizer.convert_ids_to_tokens(sample)
-            # print(sample, '2')
             masked_sample, target_labels = self.mask_generator.mask_tokens(sample, rng, **kwargs)
-            # print(masked_sample, 'masked_sample',)
-            # print(target_labels, 'target_labels')
             masked_sample = self.tokenizer.convert_tokens_to_ids(masked_sample)
-            # print(masked_sample, 'masked_sample ids')
             return {
                 'input_ids': masked_sample,
                 'labels': target_labels,
@@ -381,7 +376,6 @@ class LMDataModule(L.LightningDataModule):
             batch = [sample['text'] for sample in batch]
             batch = tokenize(batch, self.config.max_seq_len)['input_ids']
             batch = list(map(preprocess_per_sample, batch))
-            print(batch, "4")
             batch_input_ids = {'input_ids': [x['input_ids'] for x in batch]}
             batch_labels = {'input_ids': [x['labels'] for x in batch]}
             batch_input_ids = self.tokenizer.pad(

@@ -52,12 +52,12 @@ class NGramMaskGenerator:
         self.vocab_words = list(tokenizer.vocab.keys())
 
     def mask_tokens(self, tokens, rng=random, **kwargs):
+        # import pdb
         special_tokens = ['[MASK]', '[CLS]', '[SEP]', '[PAD]', '[UNK]'] # + self.tokenizer.tokenize(' ')
         indices = [i for i in range(len(tokens)) if tokens[i] not in special_tokens]
         ngrams = np.arange(1, self.max_gram + 1, dtype=np.int64)
         pvals = 1. / np.arange(1, self.max_gram + 1)
         pvals /= pvals.sum(keepdims=True)
-
         unigrams = []
         for id in indices:
             if self.max_gram>1 and len(unigrams)>=1 and self.tokenizer.part_of_whole_word(tokens[id]):
@@ -90,6 +90,7 @@ class NGramMaskGenerator:
                     break
 
         target_labels = [self.tokenizer.vocab[x] if x else 0 for x in target_labels]
+        # pdb.set_trace()
         return tokens, target_labels
 
     def _choice(self, rng, data, p):
