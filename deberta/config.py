@@ -21,3 +21,4 @@ class Config:
     gradient_clip_val:float = 1.0
     gradient_clip_algorithm:str = 'norm'
     tokenizer_name:str = 'microsoft/deberta-v3-base'
+    share_embedding:str = 'gdes'  # 'es' or 'gdes' or None

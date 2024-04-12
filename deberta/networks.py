@@ -62,59 +62,10 @@ from datasets import concatenate_datasets
 from .config import Config
 from .attentions import TransformerBlock
 from .utils import MaskedLayerNorm, NGramMaskGenerator
-from .data import ReplaceTaskPrepare, Masker
+from .data import LMDataModule
 from .fetch_dataset import fetch_dataset
 from .prep_dataset import split_sentences, tokenize
-
-class InputEmbedding(nn.Module):
-    def __init__(self, config:Config):
-        super().__init__()
-        self.config = config
-        self.embedding_dim = config.embedding_dim
-        self.hidden_dim = config.hidden_dim
-        self.padding_idx = config.padding_idx
-        self.absolute_position_biased_input = config.absolute_position_biased_input
-
-        self.word_embedding_layer = nn.Embedding(
-            config.vocab_size,
-            config.embedding_dim,
-            config.padding_idx,
-        )
-        self.absolute_position_embedding_layer = nn.Embedding(
-            config.max_seq_len,
-            config.embedding_dim,
-        )
-        self.layernorm = nn.LayerNorm(config.hidden_dim, eps=config.layernorm_eps)
-        if config.embedding_dim != config.hidden_dim:
-            self.word_projection = nn.Linear(config.embedding_dim, config.hidden_dim, bias=False)
-            self.position_projection = nn.Linear(config.embedding_dim, config.hidden_dim, bias=False)
-
-    def forward(
-            self,
-            input_ids:torch.Tensor,  # (batch, seq_len)
-            attention_mask:torch.Tensor=None,  # (batch, seq_len)
-            position_ids:torch.Tensor=None  # (batch, seq_len)
-        ):
-        device = input_ids.device
-        input_ids = input_ids.long()
-        if not position_ids:
-            input_seq_len = input_ids.shape[-1]
-            position_ids = torch.arange(0, input_seq_len, dtype=torch.long, device=device)
-            position_ids = repeat(position_ids, 'n -> b n', b=input_ids.shape[0])
-        word_embeddings = self.word_embedding_layer(input_ids)
-        position_embeddings = self.absolute_position_embedding_layer(position_ids)
-        
-        if self.absolute_position_biased_input:
-            word_embeddings = word_embeddings + position_embeddings
-        if self.embedding_dim != self.hidden_dim:
-            word_embeddings = self.word_projection(word_embeddings)
-            position_embeddings = self.position_projection(position_embeddings)
-        word_embeddings = MaskedLayerNorm(self.layernorm, word_embeddings, attention_mask)
-
-        return {
-        'embeddings': word_embeddings,  # (batch, seq_len, hidden_dim)
-        'position_embeddings': position_embeddings  # (batch, seq_len, embedding_dim)
-        }
+from .layers import InputEmbedding
 
 
 class BaseNetwork(nn.Module):
@@ -172,7 +123,7 @@ class Generator(nn.Module):
     def __init__(self, config:Config):
         super().__init__()
         self.config = config
-        self.input_embedding = InputEmbedding(config)
+        self.embedding = InputEmbedding(config)
         self.encoder = BaseNetwork(config)
         self.enhanced_mask_decoder = EnhancedMaskDecoder(config)
         self.head = MaskedLanguageModelHead(config)
@@ -186,10 +137,10 @@ class Generator(nn.Module):
             returns_all_hidden_states:bool=True,
             **kwargs,
         ):
-        input_embeddings = self.input_embedding(input_ids, attention_mask)
+        input_embeddings = self.embedding(input_ids, attention_mask)
         hidden_states, all_hidden_states = self.encoder(input_embeddings['embeddings'], attention_mask, returns_all_hidden_states)
         hidden_states = self.enhanced_mask_decoder(self.encoder.layers[-1], all_hidden_states[-2], input_embeddings['position_embeddings'])
-        output = self.head(hidden_states, self.input_embedding.word_embedding_layer.weight)
+        output = self.head(hidden_states, self.embedding.word_embedding_layer.weight)
         if labels is not None:
             loss = self._loss_fn(output, labels)
             return output, loss
@@ -223,7 +174,7 @@ class Discriminator(nn.Module):
     def __init__(self, config:Config):
         super().__init__()
         self.config = config
-        self.input_embedding = InputEmbedding(config)
+        self.embedding = InputEmbedding(config)
         self.encoder = BaseNetwork(config)
         self.enhanced_mask_decoder = EnhancedMaskDecoder(config)
         self.head = ReplacedTokenDiscriminatorHead(config)
@@ -237,7 +188,7 @@ class Discriminator(nn.Module):
             returns_all_hidden_states:bool=True,
             **kwargs,
         ):
-        input_embeddings = self.input_embedding(input_ids, attention_mask)
+        input_embeddings = self.embedding(input_ids, attention_mask)
         hidden_states, all_hidden_states = self.encoder(input_embeddings['embeddings'], attention_mask, returns_all_hidden_states)
         hidden_states = self.enhanced_mask_decoder(self.encoder.layers[-1], all_hidden_states[-2], input_embeddings['position_embeddings'])
         output = self.head(hidden_states)
@@ -262,6 +213,7 @@ class LM(L.LightningModule):
         self.generator = Generator(config)
         self.discriminator = Discriminator(config)
         self.automatic_optimization = False
+        self._register_discriminator_fw_hook()
 
     def forward_generator(self, input_ids:Tensor, attention_mask:Tensor=None, labels:Tensor=None, **kwargs):
         return self.generator(input_ids, attention_mask, labels, **kwargs)
@@ -328,72 +280,38 @@ class LM(L.LightningModule):
         new_labels = torch.where(labels > 0, labels != replaced_input_ids, new_labels)
         return new_labels
     
+    def _register_discriminator_fw_hook(self, *kwargs):
+        word_bias = torch.zeros_like(self.discriminator.embedding.word_embedding_layer.weight)
+        word_bias = torch.nn.Parameter(word_bias)
+        position_bias = torch.zeros_like(self.discriminator.embedding.absolute_position_embedding_layer.weight)
+        position_bias = torch.nn.Parameter(position_bias)
+        delattr(self.discriminator.embedding.word_embedding_layer, 'weight')
+        self.discriminator.embedding.word_embedding_layer.register_parameter('_weight', word_bias)
+        delattr(self.discriminator.embedding.absolute_position_embedding_layer, 'weight')
+        self.discriminator.embedding.absolute_position_embedding_layer.register_parameter('_weight', position_bias)
 
-class LMDataModule(L.LightningDataModule):
-    def __init__(self, config:Config, tokenizer, **kwargs):
-        super().__init__()
-        self.config = config
-        self.tokenizer = tokenizer
-        self.mask_generator = NGramMaskGenerator(tokenizer, config.mask_lm_prob, config.max_seq_len, config.max_preds_per_seq, **kwargs)
-        self.train_dataset = None
-        self.dataset_names = ['wikipedia', 'bookcorpus']
+        def fw_hook(module, *inputs):
+            if self.config.share_embedding == 'gdes': # Gradient-disentangled weight/embedding sharing
+                g_w_ebd = self.generator.embedding.word_embedding_layer
+                d_w_ebd = self.discriminator.embedding.word_embedding_layer
+                self._set_param(d_w_ebd, 'weight', g_w_ebd.weight.detach() + d_w_ebd._weight)
+                g_p_ebd = self.generator.embedding.absolute_position_embedding_layer
+                d_p_ebd = self.discriminator.embedding.absolute_position_embedding_layer
+                self._set_param(d_p_ebd, 'weight', g_p_ebd.weight.detach() + d_p_ebd._weight)
 
-    def prepare_data(self) -> None:
-        for dataset_name in self.dataset_names:
-            fetch_dataset(dataset_name)
+            elif self.config.share_embedding == 'es': # vallina embedding sharing
+                g_w_ebd = self.generator.embedding.word_embedding_layer
+                d_w_ebd = self.discriminator.embedding.word_embedding_layer
+                self._set_param(d_w_ebd, 'weight', g_w_ebd.weight)
+                g_p_ebd = self.generator.embedding.absolute_position_embedding_layer
+                d_p_ebd = self.discriminator.embedding.absolute_position_embedding_layer
+                self._set_param(d_p_ebd, 'weight', g_p_ebd.weight)
+            return None
+        self.discriminator.register_forward_pre_hook(fw_hook)
 
-    def setup(self, stage='train'):
-        datasets = [fetch_dataset(dataset_name)['train'] for dataset_name in self.dataset_names]
-        for idx, dataset in enumerate(datasets):
-            dataset = dataset.map(
-                split_sentences,
-                batched=True,
-                num_proc=12,
-                remove_columns=dataset.column_names)
-            datasets[idx] = dataset
-        self.train_dataset = concatenate_datasets(datasets)
-
-    def train_dataloader(self):
-        return DataLoader(
-            self.train_dataset,
-            batch_size=self.config.batch_size,
-            collate_fn=self.get_generator_input_collate_fn(),
-            shuffle=True,
-            num_workers=4,
-            pin_memory=True,
-            drop_last=True,)
-    
-    def get_generator_input_collate_fn(self, rng=random, **kwargs):
-        def preprocess_per_sample(sample):
-            sample = self.tokenizer.convert_ids_to_tokens(sample)
-            masked_sample, target_labels = self.mask_generator.mask_tokens(sample, rng, **kwargs)
-            masked_sample = self.tokenizer.convert_tokens_to_ids(masked_sample)
-            return {
-                'input_ids': masked_sample,
-                'labels': target_labels,
-                }
-        def collate_fn(batch):
-            batch = [sample['text'] for sample in batch]
-            batch = tokenize(batch, self.config.max_seq_len)['input_ids']
-            batch = list(map(preprocess_per_sample, batch))
-            batch_input_ids = {'input_ids': [x['input_ids'] for x in batch]}
-            batch_labels = {'input_ids': [x['labels'] for x in batch]}
-            batch_input_ids = self.tokenizer.pad(
-                batch_input_ids,
-                padding='longest',
-                return_tensors='pt',
-                return_attention_mask=True)
-            batch_labels = self.tokenizer.pad(
-                batch_labels,
-                padding='longest',
-                return_tensors='pt',
-                return_attention_mask=False)
-            return {
-                'input_ids': batch_input_ids['input_ids'],
-                'attention_mask': batch_input_ids['attention_mask'],
-                'labels': batch_labels['input_ids'],
-            }
-        return collate_fn
-    
-    
+    @staticmethod
+    def _set_param(module, param_name, value):
+        if hasattr(module, param_name):
+            delattr(module, param_name)
+        module.register_buffer(param_name, value)
     
