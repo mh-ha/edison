@@ -22,3 +22,4 @@ class Config:
     gradient_clip_algorithm:str = 'norm'
     tokenizer_name:str = 'microsoft/deberta-v3-base'
     share_embedding:str = 'gdes'  # 'es' or 'gdes' or None
+    gen_over_disc_ratio:float = 0.5  # num_gen_encoder = num_disc_encoder * gen_over_disc_ratio

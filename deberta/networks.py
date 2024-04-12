@@ -69,12 +69,17 @@ from .layers import InputEmbedding
 
 
 class BaseNetwork(nn.Module):
-    def __init__(self, config:Config):
+    def __init__(self, config:Config, is_generator:bool=False):
         super().__init__()
         self.config = config
-        self.layers = nn.ModuleList([
-            TransformerBlock(config) for _ in range(config.num_hidden_layers)
-        ])
+        if is_generator:
+            self.layers = nn.ModuleList([
+                TransformerBlock(config) for _ in range(int(config.num_hidden_layers * config.gen_over_disc_ratio))
+            ])
+        else:
+            self.layers = nn.ModuleList([
+                TransformerBlock(config) for _ in range(config.num_hidden_layers)
+            ])
 
     def forward(self, hidden_states:Tensor, attention_mask:Tensor=None, returns_all_hidden_states:bool=True):
         all_hidden_states = []
@@ -124,7 +129,7 @@ class Generator(nn.Module):
         super().__init__()
         self.config = config
         self.embedding = InputEmbedding(config)
-        self.encoder = BaseNetwork(config)
+        self.encoder = BaseNetwork(config, is_generator=True)
         self.enhanced_mask_decoder = EnhancedMaskDecoder(config)
         self.head = MaskedLanguageModelHead(config)
         self.loss_fn = nn.CrossEntropyLoss(reduction='mean')
