@@ -11,7 +11,7 @@ num_hidden_layers: 12
 device: 'cuda'
 max_seq_len: 512
 mask_lm_prob: 512
-max_preds_per_seq: 'None'
+max_preds_per_seq: null
 learning_rate: 1.e-4
 batch_size: 4
 gradient_clip_val: 1.0
