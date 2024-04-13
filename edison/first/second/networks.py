@@ -59,13 +59,13 @@ from einops import rearrange, einsum, reduce, repeat
 import lightning as L
 from datasets import concatenate_datasets
 
-from .config import Config
-from .attentions import TransformerBlock
-from .utils import MaskedLayerNorm, NGramMaskGenerator
+from ..config.config import Config
+from .third.transformer import TransformerBlock
+from .third.utils import MaskedLayerNorm, NGramMaskGenerator
 from .data import LMDataModule
-from .fetch_dataset import fetch_dataset
-from .prep_dataset import split_sentences, tokenize
-from .layers import InputEmbedding
+from .third.fetch_dataset import fetch_dataset
+from .third.prep_dataset import split_sentences, tokenize
+from .third.layer import InputEmbedding
 
 
 class BaseNetwork(nn.Module):
@@ -128,7 +128,7 @@ class Generator(nn.Module):
     def __init__(self, config:Config):
         super().__init__()
         self.config = config
-        self.embedding = InputEmbedding(config)
+        self.embedding = InputEmbedding(**config.__dict__)
         self.encoder = BaseNetwork(config, is_generator=True)
         self.enhanced_mask_decoder = EnhancedMaskDecoder(config)
         self.head = MaskedLanguageModelHead(config)

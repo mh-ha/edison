@@ -17,13 +17,13 @@ from torch.utils.data import Dataset, DataLoader
 import lightning as L
 from datasets import concatenate_datasets
 
-from .config import Config
-from .utils import NGramMaskGenerator
-from .fetch_dataset import fetch_dataset
-from .prep_dataset import split_sentences, tokenize
+from ..config.config import Config
+from .third.utils import NGramMaskGenerator
+from .third.fetch_dataset import fetch_dataset
+from .third.prep_dataset import split_sentences, tokenize
 
-from .config import Config
-from .utils import NGramMaskGenerator
+from ..config.config import Config
+from .third.utils import NGramMaskGenerator
 
 
 class Masker:

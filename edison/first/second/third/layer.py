@@ -2,32 +2,40 @@ import torch
 from torch import nn, Tensor
 from einops import rearrange, einsum, reduce, repeat
 
-from .config import Config
+from ...config.config import Config
 from .utils import MaskedLayerNorm
 
 
 class InputEmbedding(nn.Module):
-    def __init__(self, config:Config):
+    def __init__(
+            self,
+            embedding_dim:int=768,
+            hidden_dim:int=768,
+            vocab_size:int=30522,
+            max_seq_len:int=512,
+            padding_idx:int=0,
+            layernorm_eps:float=1e-9,
+            absolute_position_biased_input:bool=True,
+            **kwargs):
         super().__init__()
-        self.config = config
-        self.embedding_dim = config.embedding_dim
-        self.hidden_dim = config.hidden_dim
-        self.padding_idx = config.padding_idx
-        self.absolute_position_biased_input = config.absolute_position_biased_input
+        self.embedding_dim = embedding_dim
+        self.hidden_dim = hidden_dim
+        self.padding_idx = padding_idx
+        self.absolute_position_biased_input = absolute_position_biased_input
 
         self.word_embedding_layer = nn.Embedding(
-            config.vocab_size,
-            config.embedding_dim,
-            config.padding_idx,
+            vocab_size,
+            embedding_dim,
+            padding_idx,
         )
         self.absolute_position_embedding_layer = nn.Embedding(
-            config.max_seq_len,
-            config.embedding_dim,
+            max_seq_len,
+            embedding_dim,
         )
-        self.layernorm = nn.LayerNorm(config.hidden_dim, eps=config.layernorm_eps)
-        if config.embedding_dim != config.hidden_dim:
-            self.word_projection = nn.Linear(config.embedding_dim, config.hidden_dim, bias=False)
-            self.position_projection = nn.Linear(config.embedding_dim, config.hidden_dim, bias=False)
+        self.layernorm = nn.LayerNorm(hidden_dim, eps=layernorm_eps)
+        if embedding_dim != hidden_dim:
+            self.word_projection = nn.Linear(embedding_dim, hidden_dim, bias=False)
+            self.position_projection = nn.Linear(embedding_dim, hidden_dim, bias=False)
 
     def forward(
             self,
@@ -58,17 +66,23 @@ class InputEmbedding(nn.Module):
 
 
 class RelativePositionEmbedding(nn.Module):
-    def __init__(self, config:Config):
+    def __init__(
+            self,
+            num_heads:int=12,
+            num_head_dim:int=64,
+            max_seq_len:int=512,
+            hidden_dim:int=768,
+            **kwargs):
         super().__init__()
-        self.config = config
-        self.num_heads = config.num_heads
-        self.num_head_dim = config.num_head_dim
-        self.max_seq_len = config.max_seq_len
-        self.relative_position_embedding_layer = nn.Embedding(config.max_seq_len, config.hidden_dim)
-        self.relative_position_query_layer = nn.Linear(config.hidden_dim, config.num_heads*config.num_head_dim)
-        self.relative_position_key_layer = nn.Linear(config.hidden_dim, config.num_heads*config.num_head_dim)
+        self.num_heads = num_heads
+        self.num_head_dim = num_head_dim
+        self.max_seq_len = max_seq_len
+        self.hidden_dim = hidden_dim
+        self.relative_position_embedding_layer = nn.Embedding(max_seq_len, hidden_dim)
+        self.relative_position_query_layer = nn.Linear(hidden_dim, num_heads*num_head_dim)
+        self.relative_position_key_layer = nn.Linear(hidden_dim, num_heads*num_head_dim)
 
-    def forward(self, hidden_states:Tensor, device='cuda'):
+    def forward(self, hidden_states:Tensor):
         # hidden_states: (batch, seq_len, hidden_dim)
         batch_size, seq_len, hidden_dim = hidden_states.shape
         relative_position = self.generate_relative_position(seq_len).to(hidden_states.device)
