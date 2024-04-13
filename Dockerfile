@@ -1,4 +1,6 @@
-FROM pytorchlightning/pytorch_lightning:base-cuda-py3.11-torch2.2-cuda12.1.0
+FROM pytorchlightning/pytorch_lightning:base-cuda-py3.10-torch2.2-cuda12.1.0
+# FROM pytorchlightning/pytorch_lightning:base-cuda-py3.10-torch2.0-cuda11.8.0
+# FROM pytorchlightning/pytorch_lightning:base-cuda-py3.9-torch1.11-cuda11.3.1
 
 WORKDIR /app
 
@@ -10,7 +12,7 @@ RUN apt-get update && apt-get install -y \
     apt-get clean && \
     rm -rf /var/lib/apt/lists/*
 
-COPY requirements.txt /app/
-RUN pip install --no-cache-dir -r requirements.txt
+# COPY requirements.txt /app/
+# RUN pip install --no-cache-dir -r requirements.txt
 
 
