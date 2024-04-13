@@ -48,23 +48,14 @@ FLOW:
         - 계산 방식은 generator와 같음
             prediction head만 바꿔서 사용 (+ task에 맞는 loss)
 """
-import random
-from functools import partial
 
 import torch
 from torch import nn, Tensor
-from torch import functional as F
-from torch.utils.data import Dataset, DataLoader
 from einops import rearrange, einsum, reduce, repeat
 import lightning as L
-from datasets import concatenate_datasets
 
 from ..config.config import Config
 from .third.transformer import TransformerBlock
-from .third.utils import MaskedLayerNorm, NGramMaskGenerator
-from .data import LMDataModule
-from .third.fetch_dataset import fetch_dataset
-from .third.prep_dataset import split_sentences, tokenize
 from .third.layer import InputEmbedding
 
 

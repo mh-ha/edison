@@ -7,9 +7,6 @@ model, tokenizer:
     'deberta-v3-xsmall': PretrainedModel('deberta-v3-xsmall', 'spm.model', 'spm'),
 """
 
-from bisect import bisect
-import math
-import numpy as np
 import random
 import torch
 
