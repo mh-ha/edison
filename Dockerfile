@@ -1,4 +1,5 @@
-FROM pytorchlightning/pytorch_lightning:base-cuda-py3.10-torch2.0-cuda11.8.0
+# FROM pytorchlightning/pytorch_lightning:base-cuda-py3.10-torch2.0-cuda11.8.0
+FROM pytorchlightning/pytorch_lightning:base-cuda-py3.9-torch1.11-cuda11.3.1
 
 WORKDIR /app
 
