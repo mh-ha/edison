@@ -4,7 +4,7 @@ import lightning as L
 
 from ..config.config import Config
 from .second.networks import Generator, Discriminator
-from .second.third.optimizer import Adam
+from .second.third.optimizer import AdamW
 
 
 class LM(L.LightningModule):
@@ -12,6 +12,8 @@ class LM(L.LightningModule):
         super().__init__()
         self.save_hyperparameters("config")
         self.config = config
+        self.batch_size = config.batch_size
+        self.gradient_accumulation_steps = config.gradient_accumulation_steps
         self.generator = Generator(config)
         self.discriminator = Discriminator(config)
         self.automatic_optimization = False
@@ -31,22 +33,24 @@ class LM(L.LightningModule):
         input_ids, attention_mask, labels = batch['input_ids'], batch['attention_mask'], batch['labels']
         output_disc, loss_disc = self.forward_discriminator(input_ids, attention_mask, labels)
 
+        self.manual_backward(loss_gen / self.gradient_accumulation_steps)
+        self.manual_backward(loss_disc / self.gradient_accumulation_steps)
         # optimize
-        opt_gen, opt_disc = self.optimizers()
-        opt_gen.zero_grad()
-        self.manual_backward(loss_gen)
-        self.clip_gradients(
-            opt_gen,
-            gradient_clip_val=self.config.gradient_clip_val,
-            gradient_clip_algorithm=self.config.gradient_clip_algorithm)
-        opt_gen.step()
-        opt_disc.zero_grad()
-        self.manual_backward(loss_disc)
-        self.clip_gradients(
-            opt_disc,
-            gradient_clip_val=self.config.gradient_clip_val,
-            gradient_clip_algorithm=self.config.gradient_clip_algorithm)
-        opt_disc.step()
+        if (batch_idx + 1) % self.gradient_accumulation_steps == 0:
+            # print('##### Optimizing #####')
+            opt_gen, opt_disc = self.optimizers()
+            self.clip_gradients(
+                opt_gen,
+                gradient_clip_val=self.config.gradient_clip_val,
+                gradient_clip_algorithm=self.config.gradient_clip_algorithm)
+            opt_gen.step()
+            opt_gen.zero_grad()
+            self.clip_gradients(
+                opt_disc,
+                gradient_clip_val=self.config.gradient_clip_val,
+                gradient_clip_algorithm=self.config.gradient_clip_algorithm)
+            opt_disc.step()
+            opt_disc.zero_grad()
 
         # log
         self.log('loss_gen', loss_gen, on_step=True, prog_bar=True)
@@ -54,8 +58,8 @@ class LM(L.LightningModule):
         # return [loss_gen, loss_disc]
     
     def configure_optimizers(self):
-        gen_optimizer = Adam(self.generator.parameters(), lr=self.config.learning_rate)
-        disc_optimizer = Adam(self.discriminator.parameters(), lr=self.config.learning_rate)
+        gen_optimizer = AdamW(self.generator.parameters(), lr=self.config.learning_rate)
+        disc_optimizer = AdamW(self.discriminator.parameters(), lr=self.config.learning_rate)
         return [gen_optimizer, disc_optimizer], []
     
     def _get_discriminator_inputs(self, masked_data, logits, is_stochastic=True, **kwargs):
