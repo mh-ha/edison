@@ -43,7 +43,7 @@ class LMDataModule(L.LightningDataModule):
             batch_size=self.config.batch_size,
             collate_fn=self.get_generator_input_collate_fn(),
             shuffle=True,
-            num_workers=4,
+            num_workers=self.config.num_trainloader_workers,
             pin_memory=True,
             drop_last=True,)
     
