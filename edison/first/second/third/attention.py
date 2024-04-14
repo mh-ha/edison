@@ -73,6 +73,7 @@ class DisentangledSelfAttention(nn.Module):
         return attention_output
     
 
+#TODO: implement PerceiverAttention
 # class PerceiverAttention
 # option: pre-, post-layernorm
 

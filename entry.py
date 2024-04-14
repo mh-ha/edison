@@ -27,8 +27,8 @@ import yaml
 import lightning as L
 from transformers import AutoTokenizer
 from edison.config.config import Config
-from edison.first.second.networks import LM
-from edison.first.second.data import LMDataModule
+from edison.first.module import LM
+from edison.first.datamodule import LMDataModule
 
 
 def main():

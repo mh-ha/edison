@@ -46,7 +46,6 @@ class NGramMaskGenerator:
         self.max_preds_per_seq = max_preds_per_seq
         if max_preds_per_seq is None:
             self.max_preds_per_seq = math.ceil(max_seq_len*mask_lm_prob /10)*10
-
         self.max_gram = max(max_gram, 1)
         self.mask_window = int(1/mask_lm_prob) # make ngrams per window sized context
         self.vocab_words = list(tokenizer.vocab.keys())
@@ -109,7 +108,5 @@ class NGramMaskGenerator:
             new_label = label
         else:
             new_label = rng.choice(self.vocab_words)
-
         tokens[idx] = new_label
-
         return label
