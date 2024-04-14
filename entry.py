@@ -21,26 +21,21 @@ parsing arguments:
     gradient_clip_algorithm:str = 'norm'`
 """
 
-import sys
-import os
-import logging
 import argparse
 import yaml
-import time
-import datetime
 
-import torch
 import lightning as L
 from transformers import AutoTokenizer
-from deberta.config import Config
-from deberta.networks import LM, LMDataModule
+from edison.config.config import Config
+from edison.first.module import LM
+from edison.first.datamodule import LMDataModule
 
 
 def main():
     # Parse arguments
     parser = argparse.ArgumentParser()
     parser.add_argument('--config', type=str, default=None)
-    parser.add_argument('--trainer_config', type=str, default='trainer_config.yaml')
+    parser.add_argument('--trainer_config', type=str, default='edison/config/trainer_config.yaml')
     parser.add_argument('--hidden_dim', type=int, default=768)
     parser.add_argument('--embedding_dim', type=int, default=768)
     parser.add_argument('--padding_idx', type=int, default=0)
