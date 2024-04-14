@@ -52,8 +52,6 @@ from abc import ABC, abstractmethod
 
 import torch
 from torch import nn, Tensor
-from einops import rearrange, einsum, reduce, repeat
-import lightning as L
 
 from ...config.config import Config
 from .third.transformer import TransformerBlock
