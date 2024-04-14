@@ -26,15 +26,16 @@ import yaml
 
 import lightning as L
 from transformers import AutoTokenizer
-from edison.first.config.config import Config
-from edison.first.second.networks import LM, LMDataModule
+from edison.config.config import Config
+from edison.first.second.networks import LM
+from edison.first.second.data import LMDataModule
 
 
 def main():
     # Parse arguments
     parser = argparse.ArgumentParser()
     parser.add_argument('--config', type=str, default=None)
-    parser.add_argument('--trainer_config', type=str, default='trainer_config.yaml')
+    parser.add_argument('--trainer_config', type=str, default='edison/config/trainer_config.yaml')
     parser.add_argument('--hidden_dim', type=int, default=768)
     parser.add_argument('--embedding_dim', type=int, default=768)
     parser.add_argument('--padding_idx', type=int, default=0)

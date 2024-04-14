@@ -2,7 +2,7 @@ import torch
 from torch import nn, Tensor
 from einops import rearrange, einsum, reduce, repeat
 
-from ...config.config import Config
+from ....config.config import Config
 from .utils import MaskedLayerNorm
 
 

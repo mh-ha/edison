@@ -54,7 +54,7 @@ from torch import nn, Tensor
 from einops import rearrange, einsum, reduce, repeat
 import lightning as L
 
-from ..config.config import Config
+from ...config.config import Config
 from .third.transformer import TransformerBlock
 from .third.layer import InputEmbedding
 
@@ -170,7 +170,7 @@ class Discriminator(nn.Module):
     def __init__(self, config:Config):
         super().__init__()
         self.config = config
-        self.embedding = InputEmbedding(config)
+        self.embedding = InputEmbedding(**config.__dict__)
         self.encoder = BaseNetwork(config)
         self.enhanced_mask_decoder = EnhancedMaskDecoder(config)
         self.head = ReplacedTokenDiscriminatorHead(config)

@@ -1,6 +1,6 @@
 from torch import nn, Tensor
 
-from ...config.config import Config
+from ....config.config import Config
 from .attention import DisentangledSelfAttention
 
 class TransformerFeedForward(nn.Module):
