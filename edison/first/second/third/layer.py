@@ -1,3 +1,7 @@
+"""
+    각 레이어는 서로 독립적으로 구성되어야 하며, 다른 레이어와의 의존성이 없어야 한다.
+"""
+
 import torch
 from torch import nn, Tensor
 from einops import rearrange, einsum, reduce, repeat
@@ -105,3 +109,53 @@ class RelativePositionEmbedding(nn.Module):
     def generate_relative_position_embedding(self, relative_position:Tensor):
         return self.relative_position_embedding_layer(relative_position)
 
+
+class EnhancedMaskDecoder(nn.Module):
+    def __init__(self, config:Config):
+        super().__init__()
+        self.config = config
+        
+    def forward(
+            self,
+            last_encoder_layer:nn.Module,
+            last_hidden_states:Tensor,
+            absolute_position_embeddings:Tensor,
+        ):
+        hidden_states = last_hidden_states + absolute_position_embeddings
+        for _ in range(2):
+            hidden_states = last_encoder_layer(last_hidden_states, q_hidden_states=hidden_states)
+        return hidden_states
+
+
+class MaskedLanguageModelHead(nn.Module):
+    def __init__(self, config:Config):
+        super().__init__()
+        self.config = config
+        self.dense = nn.Linear(config.hidden_dim, config.embedding_dim)
+        self.activation = nn.GELU()
+        self.layer_norm = nn.LayerNorm(config.embedding_dim, eps=config.layernorm_eps)
+        self.bias = nn.Parameter(torch.zeros(config.vocab_size))
+    
+    def forward(self, hidden_states:Tensor, word_embedding_weights:Tensor):
+        hidden_states = self.dense(hidden_states)
+        hidden_states = self.activation(hidden_states)
+        hidden_states = self.layer_norm(hidden_states)
+        logits = einsum(hidden_states, word_embedding_weights, 'b n d, v d -> b n v') + self.bias
+        return logits
+
+
+class ReplacedTokenDiscriminatorHead(nn.Module):
+    def __init__(self, config:Config):
+        super().__init__()
+        self.config = config
+        self.dense = nn.Linear(config.hidden_dim, config.hidden_dim)
+        self.activation = nn.GELU()
+        self.layernorm = nn.LayerNorm(config.hidden_dim, eps=config.layernorm_eps)
+        self.classifier = nn.Linear(config.hidden_dim, 1)
+    
+    def forward(self, hidden_states:Tensor):
+        hidden_states = self.dense(hidden_states)  # (batch, seq_len, hidden_dim)
+        hidden_states = self.activation(hidden_states)
+        hidden_states = self.layernorm(hidden_states)
+        logits = self.classifier(hidden_states)
+        return logits  # (batch, seq_len, 1)
