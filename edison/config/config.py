@@ -17,10 +17,12 @@ class Config:
     mask_lm_prob:float = 0.15
     max_preds_per_seq:int = None
     learning_rate:float = 1e-4
+    #############################
     ## num_total_steps = num_train_steps // gradient_accumulation_steps
     ## total_batch_size = batch_size * gradient_accumulation_steps (default: 4*2048=8192)
     batch_size:int = 4
     gradient_accumulation_steps:int = 8
+    #############################
     gradient_clip_val:float = 1.0
     gradient_clip_algorithm:str = 'norm'
     tokenizer_name:str = 'microsoft/deberta-v3-base'
