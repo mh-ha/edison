@@ -1,9 +1,9 @@
-hidden_dim: 768
-embedding_dim: 768
+hidden_dim: 384
+embedding_dim: 384
 padding_idx: 0
-vocab_size: 128001
+vocab_size: 128100
 absolute_position_biased_input: false
-num_heads: 12
+num_heads: 6
 num_head_dim: 64
 layernorm_eps: 1.e-7
 hidden_dropout_prob: 0.1

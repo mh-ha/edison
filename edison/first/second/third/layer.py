@@ -91,7 +91,7 @@ class RelativePositionEmbedding(nn.Module):
         self.normalize_relative_embedding = normalize_relative_embedding
         self.relative_position_embedding_layer = nn.Embedding(max_seq_len, hidden_dim)
         if normalize_relative_embedding:
-            self.LayerNorm = nn.LayerNorm(hidden_dim, layer_norm_eps)
+            self.layernorm = nn.LayerNorm(hidden_dim, layer_norm_eps)
         if not share_attention_weights:
             self.relative_position_query_layer = nn.Linear(hidden_dim, hidden_dim)
             self.relative_position_key_layer = nn.Linear(hidden_dim, hidden_dim)
@@ -149,7 +149,7 @@ class RelativePositionEmbedding(nn.Module):
 
     def generate_relative_position_embedding(self):
         if self.normalize_relative_embedding:
-            relative_position_embedding_weight = MaskedLayerNorm(self.LayerNorm, self.relative_position_embedding_layer.weight)
+            relative_position_embedding_weight = MaskedLayerNorm(self.layernorm, self.relative_position_embedding_layer.weight)
         else:
             relative_position_embedding_weight = self.relative_position_embedding_layer.weight
         # relative_position_embedding = relative_position_embedding_weight[relative_position]
@@ -181,13 +181,13 @@ class MaskedLanguageModelHead(nn.Module):
         self.config = config
         self.dense = nn.Linear(config.hidden_dim, config.embedding_dim)
         self.activation = nn.GELU()
-        self.layer_norm = nn.LayerNorm(config.embedding_dim, eps=config.layernorm_eps)
+        self.layernorm = nn.LayerNorm(config.embedding_dim, eps=config.layernorm_eps)
         self.bias = nn.Parameter(torch.zeros(config.vocab_size))
     
     def forward(self, hidden_states:Tensor, word_embedding_weights:Tensor):
         hidden_states = self.dense(hidden_states)
         hidden_states = self.activation(hidden_states)
-        hidden_states = self.layer_norm(hidden_states)
+        hidden_states = self.layernorm(hidden_states)
         logits = einsum(hidden_states, word_embedding_weights, 'b n d, v d -> b n v') + self.bias
         return logits
 
