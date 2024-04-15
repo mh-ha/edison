@@ -55,6 +55,7 @@ def main():
     parser.add_argument('--gradient_clip_val', type=float, default=1.0)
     parser.add_argument('--gradient_clip_algorithm', type=str, default='norm')
     parser.add_argument('--tokenizer_name', type=str, default='microsoft/deberta-v3-base')
+    parser.add_argument('--load_pretrained_weights', type=bool, default=False)
     args = parser.parse_args()
 
     trainer_config = yaml.safe_load(open(args.trainer_config, 'r'))
@@ -81,13 +82,17 @@ def main():
         batch_size=args.batch_size,
         gradient_clip_val=args.gradient_clip_val,
         gradient_clip_algorithm=args.gradient_clip_algorithm,
-        tokenizer_name=args.tokenizer_name
+        tokenizer_name=args.tokenizer_name,
+        load_pretrained_weights=args.load_pretrained_weights,
     )
     print(trainer_config)
     print(config)
-    model = LM(config)
     tokenizer = AutoTokenizer.from_pretrained(config.tokenizer_name)
     data_module = LMDataModule(config, tokenizer)
+    model = LM(config)
+    if config.load_pretrained_weights:
+        from edison.first.load_state import load_pretrained_LM
+        model, _, _ = load_pretrained_LM(model, config)
     trainer = L.Trainer(**trainer_config)
     trainer.fit(model, datamodule=data_module)
 

@@ -7,7 +7,11 @@ from ..config.config import Config
 def load_state(path:str):
     return torch.load(path)
 
-def load_pretrained_LM(pretrained_path:str='weights/pytorch_model.bin', config_path:str='edison/config/config.yaml'):
+def load_pretrained_LM(
+        model=None,
+        config=None,
+        pretrained_path:list=['weights/disc_xsmall.bin', 'weights/gen_xsmall.bin'],
+        config_path:str='edison/config/config.yaml',):
     disc_layer_map = {
         'deberta.embeddings.word_embeddings._weight': 'embedding.word_embedding_layer._weight',
         # 'deberta.embeddings.word_embeddings.weight': 'embedding.word_embedding_layer.weight',
@@ -76,9 +80,11 @@ def load_pretrained_LM(pretrained_path:str='weights/pytorch_model.bin', config_p
         'lm_predictions.lm_head.LayerNorm.bias': 'head.layernorm.bias',
     }
 
-    config = yaml.safe_load(open(config_path, 'r'))
-    config = Config(**config)
-    model = LM(config)
+    if config is None:
+        config = yaml.safe_load(open(config_path, 'r'))
+        config = Config(**config)
+    if model is None:
+        model = LM(config)
     def get_state_dict(base_state_dict, layer_map):
         state_dict = {}
         idx = None

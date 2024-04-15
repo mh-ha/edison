@@ -14,6 +14,8 @@ mask_lm_prob: 0.15
 max_preds_per_seq: null
 learning_rate: 5.e-4
 batch_size: 4
+gradient_accumulation_steps: 256
 gradient_clip_val: 1.0
 gradient_clip_algorithm: 'norm'
-tokenizer_name: 'microsoft/deberta-v3-base'
+tokenizer_name: 'microsoft/deberta-v3-xsmall'
+load_pretrained_weights: true
