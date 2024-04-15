@@ -46,7 +46,8 @@ class LMDataModule(L.LightningDataModule):
             shuffle=True,
             num_workers=self.config.num_trainloader_workers,
             pin_memory=True,
-            drop_last=True,)
+            drop_last=True,
+            prefetch_factor=4,)
     
     def get_generator_input_collate_fn(self, rng=random, **kwargs):
         def preprocess_per_sample(sample):
