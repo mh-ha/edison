@@ -2,7 +2,7 @@ hidden_dim: 768
 embedding_dim: 768
 padding_idx: 0
 vocab_size: 128001
-absolute_position_biased_input: True
+absolute_position_biased_input: false
 num_heads: 12
 num_head_dim: 64
 layernorm_eps: 1.e-7
