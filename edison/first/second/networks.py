@@ -55,7 +55,7 @@ from torch import nn, Tensor
 
 from ...config.config import Config
 from .third.transformer import TransformerBlock
-from .third.layer import InputEmbedding, EnhancedMaskDecoder, MaskedLanguageModelHead, ReplacedTokenDiscriminatorHead
+from .third.layer import InputEmbedding, RelativePositionEmbedding, EnhancedMaskDecoder, MaskedLanguageModelHead, ReplacedTokenDiscriminatorHead
 
 class Network(nn.Module, ABC):
     @abstractmethod
@@ -82,10 +82,10 @@ class BaseNetworkForLM(nn.Module):
             self.layers = nn.ModuleList([
                 TransformerBlock(config) for _ in range(config.num_hidden_layers)])
 
-    def forward(self, hidden_states:Tensor, attention_mask:Tensor=None, returns_all_hidden_states:bool=True):
+    def forward(self, hidden_states:Tensor, attention_mask:Tensor=None, returns_all_hidden_states:bool=True, relative_position_embedding:nn.Module=None):
         all_hidden_states = []
         for layer in self.layers:
-            hidden_states = layer(hidden_states, attention_mask)
+            hidden_states = layer(hidden_states, attention_mask, relative_position_embedding=relative_position_embedding)
             if returns_all_hidden_states:
                 all_hidden_states.append(hidden_states)
         return hidden_states, all_hidden_states
@@ -96,6 +96,7 @@ class Generator(Network):
         super().__init__()
         self.config = config
         self.embedding = InputEmbedding(**config.__dict__)
+        self.relative_position_embedding = RelativePositionEmbedding(**config.__dict__)
         self.encoder = BaseNetworkForLM(config, is_generator=True)
         self.enhanced_mask_decoder = EnhancedMaskDecoder(config)
         self.head = MaskedLanguageModelHead(config)
@@ -110,8 +111,8 @@ class Generator(Network):
             **kwargs,
         ):
         input_embeddings = self.embedding(input_ids, attention_mask)
-        hidden_states, all_hidden_states = self.encoder(input_embeddings['embeddings'], attention_mask, returns_all_hidden_states)
-        hidden_states = self.enhanced_mask_decoder(self.encoder.layers[-1], all_hidden_states[-2], input_embeddings['position_embeddings'])
+        hidden_states, all_hidden_states = self.encoder(input_embeddings['embeddings'], attention_mask, returns_all_hidden_states, self.relative_position_embedding)
+        hidden_states = self.enhanced_mask_decoder(self.encoder.layers[-1], all_hidden_states[-2], input_embeddings['position_embeddings'], self.relative_position_embedding)
         output = self.head(hidden_states, self.embedding.word_embedding_layer.weight)
         if labels is not None:
             loss = self._loss_fn(output, labels)
@@ -130,6 +131,7 @@ class Discriminator(Network):
         super().__init__()
         self.config = config
         self.embedding = InputEmbedding(**config.__dict__)
+        self.relative_position_embedding = RelativePositionEmbedding(**config.__dict__)
         self.encoder = BaseNetworkForLM(config)
         self.enhanced_mask_decoder = EnhancedMaskDecoder(config)
         self.head = ReplacedTokenDiscriminatorHead(config)
@@ -144,8 +146,8 @@ class Discriminator(Network):
             **kwargs,
         ):
         input_embeddings = self.embedding(input_ids, attention_mask)
-        hidden_states, all_hidden_states = self.encoder(input_embeddings['embeddings'], attention_mask, returns_all_hidden_states)
-        hidden_states = self.enhanced_mask_decoder(self.encoder.layers[-1], all_hidden_states[-2], input_embeddings['position_embeddings'])
+        hidden_states, all_hidden_states = self.encoder(input_embeddings['embeddings'], attention_mask, returns_all_hidden_states, self.relative_position_embedding)
+        hidden_states = self.enhanced_mask_decoder(self.encoder.layers[-1], all_hidden_states[-2], input_embeddings['position_embeddings'], self.relative_position_embedding)
         output = self.head(hidden_states)
         if labels is not None:
             loss = self._loss_fn(output, labels)

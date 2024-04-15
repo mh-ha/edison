@@ -29,7 +29,7 @@ class TransformerBlock(nn.Module):
         self.attention = DisentangledSelfAttention(config)
         self.feedforward = TransformerFeedForward(config)
 
-    def forward(self, hidden_states:Tensor, attention_mask:Tensor=None, q_hidden_states:Tensor=None):
-        attention_output = self.attention(hidden_states, q_hidden_states=q_hidden_states)
+    def forward(self, hidden_states:Tensor, attention_mask:Tensor=None, q_hidden_states:Tensor=None, relative_position_embedding:nn.Module=None):
+        attention_output = self.attention(hidden_states, q_hidden_states=q_hidden_states, relative_position_embedding=relative_position_embedding)
         feedforward_output = self.feedforward(attention_output)
         return feedforward_output

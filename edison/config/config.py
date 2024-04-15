@@ -16,6 +16,8 @@ class Config:
     max_seq_len:int = 512
     mask_lm_prob:float = 0.15
     max_preds_per_seq:int = None
+    share_attention_weights:bool = True
+    normalize_relative_embedding:bool = True
     learning_rate:float = 1e-4
     #############################
     ## num_total_steps = num_train_steps // gradient_accumulation_steps
