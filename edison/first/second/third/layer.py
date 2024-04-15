@@ -100,7 +100,7 @@ class RelativePositionEmbedding(nn.Module):
         # hidden_states: (batch, seq_len, hidden_dim)
         batch_size, seq_len, hidden_dim = hidden_states.shape
         relative_position_idx = self.generate_relative_position(seq_len)
-        # relative_position: (1, seq_len, seq_len)
+        # relative_position: (1, seq_len(q), seq_len(k))
         relative_position_embedding = self.generate_relative_position_embedding()
         # relative_position_embedding: (1, max_seq_len, hidden_dim)
         if not self.share_attention_weights:
@@ -110,12 +110,10 @@ class RelativePositionEmbedding(nn.Module):
             relative_position_query = query_layer(relative_position_embedding)
             relative_position_key = key_layer(relative_position_embedding)
         relative_position_idx = torch.clamp(relative_position_idx + self.position_bucket, 0, self.position_bucket*2-1).squeeze(0).to(hidden_states.device)
-        # relative_position_query: (seq_len, hidden_dim)
-        # relative_position_key: (seq_len, hidden_dim)
-        # relative_position_idx: (1, seq_len, seq_len)
+        # relative_position_query: (max_seq_len, hidden_dim)
+        # relative_position_key: (max_seq_len, hidden_dim)
+        # relative_position_idx: (1, seq_len(q), seq_len(k))
 
-        # relative_position_query = repeat(relative_position_query, 'n d -> b n d', b=batch_size)
-        # relative_position_key = repeat(relative_position_key, 'n d -> b n d', b=batch_size)
         return (relative_position_query, relative_position_key, relative_position_idx)
 
     def generate_relative_position(self, seq_len:int):
