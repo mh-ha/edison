@@ -32,6 +32,7 @@ class LM(L.LightningModule):
         batch = self._get_discriminator_inputs(batch, output_gen, is_stochastic=True)
         input_ids, attention_mask, labels = batch['input_ids'], batch['attention_mask'], batch['labels']
         output_disc, loss_disc = self.forward_discriminator(input_ids, attention_mask, labels)
+        loss_disc = self.config.lambda_discriminator * loss_disc
 
         self.manual_backward(loss_gen / self.gradient_accumulation_steps)
         self.manual_backward(loss_disc / self.gradient_accumulation_steps)

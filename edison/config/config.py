@@ -25,6 +25,7 @@ class Config:
     batch_size:int = 8
     gradient_accumulation_steps:int = 8
     #############################
+    lambda_discriminator:float = 50.0
     gradient_clip_val:float = 1.0
     gradient_clip_algorithm:str = 'norm'
     tokenizer_name:str = 'microsoft/deberta-v3-base'
