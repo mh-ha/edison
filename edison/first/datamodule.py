@@ -1,5 +1,6 @@
 import random
 
+import torch
 from torch.utils.data import Dataset, DataLoader
 import lightning as L
 from datasets import concatenate_datasets
@@ -43,7 +44,7 @@ class LMDataModule(L.LightningDataModule):
             batch_size=self.config.batch_size,
             collate_fn=self.get_generator_input_collate_fn(),
             shuffle=True,
-            num_workers=4,
+            num_workers=self.config.num_trainloader_workers,
             pin_memory=True,
             drop_last=True,)
     
@@ -73,8 +74,8 @@ class LMDataModule(L.LightningDataModule):
                 return_tensors='pt',
                 return_attention_mask=False)
             return {
-                'input_ids': batch_input_ids['input_ids'],
-                'attention_mask': batch_input_ids['attention_mask'],
-                'labels': batch_labels['input_ids'],
+                'input_ids': batch_input_ids['input_ids'].to(torch.int32),
+                'attention_mask': batch_input_ids['attention_mask'].to(torch.int32),
+                'labels': batch_labels['input_ids'].to(torch.int32),
             }
         return collate_fn
