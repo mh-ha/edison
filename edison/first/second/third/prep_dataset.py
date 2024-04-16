@@ -8,8 +8,8 @@ preprocess datasets.
 """
 from transformers import AutoTokenizer
 
-SPLIT_IDX = 768
-TOKENIZER = AutoTokenizer.from_pretrained('microsoft/deberta-base')
+SPLIT_IDX = 512
+TOKENIZER = AutoTokenizer.from_pretrained('microsoft/deberta-v3-xsmall')
 
 def split_sentences(samples):
     sentences = []
@@ -24,6 +24,6 @@ def tokenize(sentences:list[str], max_seq_len):
         return_token_type_ids=False,
         return_attention_mask=False,
         truncation=True,
-        max_length=max_seq_len,
+        max_length=128,
         )
     return tokenized

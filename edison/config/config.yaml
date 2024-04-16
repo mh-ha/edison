@@ -5,7 +5,7 @@ vocab_size: 128100
 absolute_position_biased_input: false
 num_heads: 6
 num_head_dim: 64
-layernorm_eps: 1.e-7
+layernorm_eps: 1.e-6
 hidden_dropout_prob: 0.1
 num_hidden_layers: 12
 device: 'cuda'
@@ -13,7 +13,7 @@ max_seq_len: 512
 mask_lm_prob: 0.15
 max_preds_per_seq: null
 learning_rate: 5.e-4
-batch_size: 4
+batch_size: 32
 gradient_accumulation_steps: 256
 gradient_clip_val: 1.0
 gradient_clip_algorithm: 'norm'

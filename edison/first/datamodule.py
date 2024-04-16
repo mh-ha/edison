@@ -47,8 +47,9 @@ class LMDataModule(L.LightningDataModule):
             num_workers=self.config.num_trainloader_workers,
             pin_memory=True,
             drop_last=True,
-            prefetch_factor=4,)
+            prefetch_factor=2,)
     
+    #TODO: 마스킹 미리 하고 매 epoch마다 새로 마스킹 하는 방식으로
     def get_generator_input_collate_fn(self, rng=random, **kwargs):
         def preprocess_per_sample(sample):
             sample = self.tokenizer.convert_ids_to_tokens(sample)

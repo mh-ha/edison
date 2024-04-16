@@ -43,7 +43,7 @@ def main():
     parser.add_argument('--absolute_position_biased_input', type=bool, default=True)
     parser.add_argument('--num_heads', type=int, default=12)
     parser.add_argument('--num_head_dim', type=int, default=64)
-    parser.add_argument('--layernorm_eps', type=float, default=1e-9)
+    parser.add_argument('--layernorm_eps', type=float, default=1e-6)
     parser.add_argument('--hidden_dropout_prob', type=float, default=0.1)
     parser.add_argument('--num_hidden_layers', type=int, default=12)
     parser.add_argument('--device', type=str, default='cuda')
@@ -52,6 +52,7 @@ def main():
     parser.add_argument('--max_preds_per_seq', type=int, default=None)
     parser.add_argument('--learning_rate', type=float, default=1e-4)
     parser.add_argument('--batch_size', type=int, default=4)
+    parser.add_argument('--gradient_accumulation_steps', type=int, default=256)
     parser.add_argument('--gradient_clip_val', type=float, default=1.0)
     parser.add_argument('--gradient_clip_algorithm', type=str, default='norm')
     parser.add_argument('--tokenizer_name', type=str, default='microsoft/deberta-v3-base')
@@ -80,6 +81,7 @@ def main():
         max_preds_per_seq=args.max_preds_per_seq,
         learning_rate=args.learning_rate,
         batch_size=args.batch_size,
+        gradient_accumulation_steps=args.gradient_accumulation_steps,
         gradient_clip_val=args.gradient_clip_val,
         gradient_clip_algorithm=args.gradient_clip_algorithm,
         tokenizer_name=args.tokenizer_name,
