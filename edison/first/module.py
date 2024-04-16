@@ -59,8 +59,18 @@ class LM(L.LightningModule):
         # return [loss_gen, loss_disc]
     
     def configure_optimizers(self):
-        gen_optimizer = AdamW(self.generator.parameters(), lr=self.config.learning_rate)
-        disc_optimizer = AdamW(self.discriminator.parameters(), lr=self.config.learning_rate)
+        gen_optimizer = AdamW(
+            self.generator.parameters(),
+            lr=self.config.learning_rate,
+            betas=(self.config.beta_1, self.config.beta_2),
+            eps=self.config.epsilon,
+            weight_decay=self.config.weight_decay)
+        disc_optimizer = AdamW(
+            self.discriminator.parameters(),
+            lr=self.config.learning_rate,
+            betas=(self.config.beta_1, self.config.beta_2),
+            eps=self.config.epsilon,
+            weight_decay=self.config.weight_decay)
         return [gen_optimizer, disc_optimizer], []
     
     def _get_discriminator_inputs(self, masked_data, logits, is_stochastic=True, **kwargs):

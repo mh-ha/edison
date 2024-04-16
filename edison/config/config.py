@@ -19,6 +19,10 @@ class Config:
     share_attention_weights:bool = True
     normalize_relative_embedding:bool = True
     learning_rate:float = 1e-4
+    weight_decay:float = 0.01
+    epsilon:float = 1e-7
+    beta_1:float = 0.9
+    beta_2:float = 0.98
     #############################
     ## num_total_steps = num_train_steps // gradient_accumulation_steps
     ## total_batch_size = batch_size * gradient_accumulation_steps (default: 4*2048=8192)
