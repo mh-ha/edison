@@ -40,5 +40,6 @@ class Config:
     
     #############################
     # AutoEncoder (compression, reconstruction)
-    
+    learning_rate:float = 1e-4
+    weight_decay:float = 0.01
     #############################
