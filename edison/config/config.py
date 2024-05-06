@@ -37,3 +37,8 @@ class Config:
     gen_over_disc_ratio:float = 0.5  # num_gen_encoder = num_disc_encoder * gen_over_disc_ratio
     num_trainloader_workers:int = 16
     load_pretrained_weights:bool = False
+    
+    #############################
+    # AutoEncoder (compression, reconstruction)
+    
+    #############################
