@@ -53,9 +53,9 @@ from abc import ABC, abstractmethod
 import torch
 from torch import nn, Tensor
 
-from ...config.config import Config
-from .third.transformer import TransformerBlock
-from .third.layer import InputEmbedding, RelativePositionEmbedding, EnhancedMaskDecoder, MaskedLanguageModelHead, ReplacedTokenDiscriminatorHead
+from ..config.config import Config
+from .transformer import TransformerBlock
+from .layer import InputEmbedding, RelativePositionEmbedding, EnhancedMaskDecoder, MaskedLanguageModelHead, ReplacedTokenDiscriminatorHead
 
 class Network(nn.Module, ABC):
     @abstractmethod

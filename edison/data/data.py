@@ -10,8 +10,8 @@ model, tokenizer:
 import random
 import torch
 
-from ...config.config import Config
-from .third.utils import NGramMaskGenerator
+from ..config.config import Config
+from ..layers.utils import NGramMaskGenerator
 
 
 class Masker:

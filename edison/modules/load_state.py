@@ -1,7 +1,7 @@
 import yaml
 import torch
 
-from .module import LM
+from .lm import LM
 from ..config.config import Config
 
 def load_state(path:str):

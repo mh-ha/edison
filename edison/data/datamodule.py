@@ -6,12 +6,12 @@ import lightning as L
 from datasets import concatenate_datasets
 
 from ..config.config import Config
-from .second.third.utils import NGramMaskGenerator
-from .second.third.fetch_dataset import fetch_dataset
-from .second.third.prep_dataset import split_sentences, tokenize
+from ..layers.utils import NGramMaskGenerator
+from .fetch_dataset import fetch_dataset
+from .prep_dataset import split_sentences, tokenize
 
 from ..config.config import Config
-from .second.third.utils import NGramMaskGenerator
+from ..layers.utils import NGramMaskGenerator
 
 
 class LMDataModule(L.LightningDataModule):

@@ -27,8 +27,8 @@ import yaml
 import lightning as L
 from transformers import AutoTokenizer
 from edison.config.config import Config
-from edison.first.module import LM
-from edison.first.datamodule import LMDataModule
+from edison.modules.lm import LM
+from edison.data.datamodule import LMDataModule
 
 
 def main():
@@ -93,7 +93,7 @@ def main():
     data_module = LMDataModule(config, tokenizer)
     model = LM(config)
     if config.load_pretrained_weights:
-        from edison.first.load_state import load_pretrained_LM
+        from edison.modules.load_state import load_pretrained_LM
         model, _, _ = load_pretrained_LM(model, config)
     trainer = L.Trainer(**trainer_config)
     trainer.fit(model, datamodule=data_module)

@@ -3,8 +3,11 @@ from torch import Tensor
 import lightning as L
 
 from ..config.config import Config
-from .second.networks import Generator, Discriminator
-from .second.third.optimizer import AdamW
+from ..layers.networks import Generator, Discriminator
+from ..layers.optimizer import AdamW
+
+
+
 
 
 class LM(L.LightningModule):
