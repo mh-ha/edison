@@ -6,8 +6,15 @@ from ..config.config import Config
 from ..layers.networks import Generator, Discriminator
 from ..layers.optimizer import AdamW
 
+from transformers import AutoTokenizer
+from transformers.models.bart.modeling_bart import (
+    BartForConditionalGeneration,
+)
 
-
+def get_BART(model_path:str='facebook/bart-large'):
+    model = BartForConditionalGeneration.from_pretrained(model_path)
+    tokenizer = AutoTokenizer.from_pretrained(model_path)
+    return model, tokenizer
 
 
 class LM(L.LightningModule):

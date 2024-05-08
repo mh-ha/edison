@@ -9,6 +9,7 @@ from einops import rearrange, repeat
 from ..config.config import Config
 from ..layers.optimizer import AdamW
 from .positional_embedding import AbsolutePositionalEmbedding
+from .lm import get_BART
 
 
 #TODO: 작동 확인
@@ -18,7 +19,7 @@ class Autoencoder(L.LightningModule):
         self.save_hyperparameters()
         self.config = config
         #TODO: LM 정의 (BART로)
-        self.lm = None
+        self.lm, self.tokenizer = get_BART(config.lm_model_path)
         self.lm.freeze()
         self.lm_encoder = self.lm.get_encoder()
         self.lm_decoder = self.lm.get_decoder()
@@ -77,7 +78,6 @@ def divisible_by(numer, denom):
     return (numer % denom) == 0
 
 
-# NN components
 class LayerNorm(nn.Module):
     def __init__(self, dim):
         super().__init__()
