@@ -16,28 +16,15 @@ from tqdm.auto import tqdm
 from edison.config.config import Config
 from .positional_embedding import AbsolutePositionalEmbedding
 
-
 #TODO: 작동 확인
-class Diffusion(L.LightningModule):
+# Diffusion 여러 개 다루는 클래스
+class Diffusions(L.LightningModule):
     def __init__(self, config:Config):
         super().__init__()
         self.save_hyperparameters()
         
-        self.diffusion = DiffusionTransformer(
-            tx_dim = config.tx_dim,
-            tx_depth = config.tx_depth,
-            heads = config.tx_dim // config.attn_head_dim,
-            latent_dim = config.latent_dim,
-            max_seq_len = config.max_seq_len,
-            self_condition = config.self_condition,
-            scale_shift = config.scale_shift,
-            dropout = 0 if config.disable_dropout else 0.1,
-            class_conditional= config.class_conditional,
-            num_classes= config.num_classes,    # the number of classes if class conditional else 0
-            class_unconditional_prob= config.class_unconditional_prob,
-            seq2seq=(config.dataset_name in {'xsum', 'qqp', 'qg', 'wmt14-de-en', 'wmt14-en-de'}),
-            seq2seq_context_dim=config.lm_dim, 
-            num_dense_connections=config.num_dense_connections,)
+        #TODO: LM+AE 정의
+        self.encoder = None
         
         self.model = GaussianDiffusion(
             self.diffusion,
@@ -142,18 +129,6 @@ class DiffusionTransformer(nn.Module):
         
         self.cross = seq2seq
 
-        self.encoder = Encoder(
-            dim=tx_dim,
-            depth=tx_depth,
-            heads=heads,
-            attn_dropout = dropout,    # dropout post-attention
-            ff_dropout = dropout,       # feedforward dropout
-            rel_pos_bias=False,
-            ff_glu=True,
-            cross_attend=self.cross,
-            time_emb_dim=tx_dim*4 if self.scale_shift else None,
-            num_dense_connections=num_dense_connections,
-        )
         if self.class_conditional:
             assert num_classes > 0
             self.class_embedding = nn.Sequential(nn.Embedding(num_classes+1, tx_dim),
@@ -227,6 +202,12 @@ class DiffusionTransformer(nn.Module):
 ModelPrediction =  namedtuple('ModelPrediction', ['pred_noise', 'pred_x_start', 'pred_v'])
 
 # helpers functions
+
+def init_zero_(layer):
+    nn.init.constant_(layer.weight, 0.)
+    if exists(layer.bias):
+        nn.init.constant_(layer.bias, 0.)
+
 def exists(x):
     return x is not None
 
@@ -308,7 +289,7 @@ def set_seeds(seed):
 class GaussianDiffusion(nn.Module):
     def __init__(
         self,
-        model,
+        config:Config,
         *,
         max_seq_len,
         sampling_timesteps = 250,
@@ -325,7 +306,22 @@ class GaussianDiffusion(nn.Module):
         assert sampler in {'ddim', 'ddpm', 'dpmpp'}, 'sampler must be one of ddim, ddpm, dpmpp'
         self.sampler = sampler
 
-        self.diffusion_model = model
+        self.diffusion_model = DiffusionTransformer(
+            tx_dim = config.tx_dim,
+            tx_depth = config.tx_depth,
+            heads = config.tx_dim // config.attn_head_dim,
+            latent_dim = config.latent_dim,
+            max_seq_len = config.max_seq_len,
+            self_condition = config.self_condition,
+            scale_shift = config.scale_shift,
+            dropout = 0 if config.disable_dropout else 0.1,
+            class_conditional= config.class_conditional,
+            num_classes= config.num_classes,    # the number of classes if class conditional else 0
+            class_unconditional_prob= config.class_unconditional_prob,
+            seq2seq=(config.dataset_name in {'xsum', 'qqp', 'qg', 'wmt14-de-en', 'wmt14-en-de'}),
+            seq2seq_context_dim=config.lm_dim, 
+            num_dense_connections=config.num_dense_connections,)
+            
         if self.diffusion_model.class_conditional:
             if self.diffusion_model.class_unconditional_prob > 0:
                 self.class_unconditional_bernoulli = torch.distributions.Bernoulli(probs=self.diffusion_model.class_unconditional_prob)

@@ -31,3 +31,7 @@ class AbsolutePositionalEmbedding(nn.Module):
         pos_emb = self.emb(pos)
         pos_emb = pos_emb * self.scale
         return l2norm(pos_emb) if self.l2norm_embed else pos_emb
+
+#TODO: 구현 필요
+class RelativePositionalEmbedding(nn.Module):
+    pass
