@@ -78,7 +78,6 @@ class TrainFunction:
         """
         # # 1-2. load pretrained LM and AE
         # ae = LD4LGAE.load_from_checkpoint(self.config.pretrained_ae_path)
-        
         # 1-2. init LM and AE
         lm, tokenizer = get_BART()
         ae = PerceiverAutoEncoder(
