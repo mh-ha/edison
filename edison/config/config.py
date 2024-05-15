@@ -2,6 +2,21 @@ from dataclasses import dataclass
 
 @dataclass
 class Config:
+    #############################
+    # Basic information
+    model_name:str
+    train_for:str
+    train_data:str
+    #############################
+    # Perceiver AutoEncoder
+    d_model:int = 768
+    num_encoder_latents:int = 256
+    num_decoder_latents:int = 256
+    dim_ae:int = 256
+    num_layers:int = 12
+    transformer_decoder:bool = True
+    l2_normalize_latents:bool = True
+    #############################
     hidden_dim:int
     embedding_dim:int
     padding_idx:int
