@@ -9,10 +9,11 @@
 """
 import os
 os.environ['CURL_CA_BUNDLE'] = ''
+os.environ["TOKENIZERS_PARALLELISM"] = "false"
 
 from .modules.lm import get_BART
 from .modules.ae import PerceiverAutoEncoder
-from .modules.lightning_modules import LD4LGAE
+from .modules.lightning_modules import LD4LGAE, LD4LGDiffusion
 from .modules.lightning_data_module import get_dataset, get_dataloader
 from .trainer import get_trainer
 from .config.config import Config
@@ -26,13 +27,14 @@ class TrainFunction:
         2. init lightning data module
         """
         self.trainer = get_trainer(config)
-        self.dataset = get_dataset(config.train_data)['train']
+        self.dataset = get_dataset(config.dataset_name)
 
     def train_LD4LG_AE(self):
         """
         1. init LM
         2. init AE
         3. init lightning module using LM and AE
+        4. init data loader
         5. train
         """
         # 1. init LM
@@ -54,15 +56,16 @@ class TrainFunction:
         model = LD4LGAE(self.config, lm, ae)
         
         # 4. init data loader
-        self.dataset = get_dataloader(
+        self.dataloader = get_dataloader(
             self.config,
-            self.dataset,
+            self.dataset['train'],
             lm._get_decoder_start_token_id(),
             tokenizer,
-            self.config.max_seq_len)
+            self.config.max_seq_len,
+            mode='ae',)
         
         # 5. train
-        self.trainer.fit(model, train_dataloaders=self.dataset)
+        self.trainer.fit(model, train_dataloaders=self.dataloader)
     
     def train_LD4LG_Diffusion(self):
         """
@@ -70,14 +73,44 @@ class TrainFunction:
         2. init pretrained AE
         3. init Diffusion
         4. init lightning module using LM, AE, Diffusion
+        5. init data loader
         6. train
         """
+        # # 1-2. load pretrained LM and AE
+        # ae = LD4LGAE.load_from_checkpoint(self.config.pretrained_ae_path)
+        
+        # 1-2. init LM and AE
+        lm, tokenizer = get_BART()
+        ae = PerceiverAutoEncoder(
+            dim_lm=self.config.d_model,
+            dim_ae=self.config.dim_ae,
+            depth=self.config.num_layers,
+            num_encoder_latents=self.config.num_encoder_latents,
+            num_decoder_latents=self.config.num_decoder_latents,
+            transformer_decoder=self.config.transformer_decoder,
+            l2_normalize_latents=self.config.l2_normalize_latents)
+        model = LD4LGAE(self.config, lm, ae)
+        
+        # 3-4. init lightning module using LM, AE, Diffusion
+        diffusion = LD4LGDiffusion(self.config, model)
+        
+        # 5. init data loader
+        self.dataloader = get_dataloader(
+            self.config,
+            self.dataset['train'],
+            lm._get_decoder_start_token_id(),
+            tokenizer,
+            self.config.max_seq_len,)
+        
+        # 6. train
+        self.trainer.fit(diffusion, train_dataloaders=self.dataloader)
     
     def train_edison_AE(self):
         """
         1. init LM
         2. init AE
         3. init lightning module using LM and AE
+        4. init data loader
         5. train
         """
         

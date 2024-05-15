@@ -5,13 +5,14 @@ class Config:
     #############################
     # Basic information
     model_name:str = 'LD4LG'
-    train_for:str = 'AE'
-    train_data:str = 'roc'
+    train_for:str = 'Diffusion'
+    dataset_name:str = 'roc'
     gradient_clip_val:float = 1.0
     gradient_clip_algorithm:str = 'norm'
     gradient_accumulation_steps:int = 1
-    train_batch_size:int = 256  #TODO: 8은 되고 256은 안 되는 현상
+    train_batch_size:int = 8  #TODO: 8은 되고 256은 안 되는 현상
     max_seq_len:int = 64
+    learning_rate:float = 1e-4  #1e-4 for AE, 2e-4 for diffusion
     #############################
     # Perceiver AutoEncoder
     d_model:int = 768
@@ -22,9 +23,29 @@ class Config:
     transformer_decoder:bool = True
     l2_normalize_latents:bool = True
     #############################
-    # LD4LGAE
-    learning_rate:float = 1e-4
-    # #############################
+    # LD4LG AE
+    #############################
+    # LD4LG Diffusion
+    pretrained_ae_path:str = ''
+    sampling_timesteps:int = 250
+    loss_type:str = 'l2'
+    objective:str = 'pred_v'
+    scale:float = 1.
+    train_prob_self_cond:float = 0.5
+    tx_dim:int = 768
+    tx_depth:int = 12
+    attn_head_dim:int = 64
+    latent_dim:int = 64     # must be equal to dim_ae
+    lm_dim:int = 768        # must be equal to lm dim(=d_model)
+    dropout:float = 0.1
+    class_conditional:bool = False
+    num_classes:int = 0     # depends on class_conditional and dataset_name
+    class_unconditional_prob:float = 0.1
+    num_samples:int = 1000
+    self_condition:bool = True
+    scale_shift:bool = True
+    num_dense_connections:int = 3
+    #############################
     # hidden_dim:int
     # embedding_dim:int
     # padding_idx:int

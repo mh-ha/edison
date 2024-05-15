@@ -4,6 +4,7 @@ import lightning as L
 import torch
 
 from ..config.config import Config
+from .diffusion import GaussianDiffusion
 
 
 class LD4LGAE(L.LightningModule):
@@ -14,7 +15,7 @@ class LD4LGAE(L.LightningModule):
         ae:torch.nn.Module,
         ):
         super().__init__()
-        self.save_hyperparameters("config")
+        self.save_hyperparameters('config')
         self.config = config
         self.lm = lm
         # Freeze LM
@@ -28,15 +29,27 @@ class LD4LGAE(L.LightningModule):
         """
         inputs = batch['input_ids']
         attention_masks = batch['attention_mask']
-        with torch.no_grad():
-            # LM encoder outputs
-            encoder_outputs = self.lm.get_encoder()(
-                input_ids = inputs,
-                attention_mask = attention_masks)
+        encoder_outputs = self.lm.get_encoder()(
+            input_ids = inputs,
+            attention_mask = attention_masks)
         encoder_outputs = self.ae.encode(
-            encoder_outputs,
+            encoder_outputs['last_hidden_state'],
             attention_mask=attention_masks)
         return encoder_outputs
+    
+    def encode(self, input_ids, attention_masks):
+        encoder_outputs = self.lm.get_encoder()(
+            input_ids=input_ids,
+            attention_mask=attention_masks)
+        encoder_outputs = self.ae.encode(
+            encoder_outputs['last_hidden_state'],
+            attention_mask=attention_masks)
+        return encoder_outputs
+
+    def decode(self, encoder_outputs):
+        decoder_outputs = self.ae.decode(encoder_outputs['last_hidden_state'])
+        outputs = self.lm(encoder_outputs=decoder_outputs)
+        return outputs['logits']
 
     def training_step(self, batch, batch_idx):
         inputs = batch['input_ids']
@@ -65,3 +78,41 @@ class LD4LGAE(L.LightningModule):
 
     def configure_optimizers(self):
         return torch.optim.AdamW(self.ae.parameters(), lr=self.config.learning_rate)
+
+
+class LD4LGDiffusion(L.LightningModule):
+    def __init__(
+        self,
+        config:Config,
+        autoencoder:LD4LGAE,
+        ):
+        super().__init__()
+        self.save_hyperparameters('config')
+        self.config = config
+        self.autoencoder = autoencoder
+        self.autoencoder.freeze()
+        self.diffusion_model = GaussianDiffusion(config=config)
+        
+    def forward(self, encoder_outputs, class_id=None):
+        mask = torch.ones(
+            encoder_outputs.shape[0],
+            self.config.num_encoder_latents,
+            dtype=torch.bool,
+            device=encoder_outputs.device,)
+        return self.diffusion_model(
+            txt_latent=encoder_outputs,
+            mask=mask,
+            class_id=class_id
+            )
+        
+    def training_step(self, batch, batch_idx):
+        inputs = batch['input_ids']
+        attention_masks = batch['attention_mask']
+        class_id = batch['label'] if 'label' in batch else None
+        encoder_outputs = self.autoencoder.encode(inputs, attention_masks)
+        loss = self.forward(encoder_outputs, class_id)
+        self.log('loss', loss, on_step=True, prog_bar=True)
+        return loss
+
+    def configure_optimizers(self):
+        return torch.optim.AdamW(self.diffusion_model.parameters(), lr=self.config.learning_rate)

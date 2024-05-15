@@ -15,48 +15,8 @@ from tqdm.auto import tqdm
 
 from edison.config.config import Config
 from .positional_embedding import AbsolutePositionalEmbedding
+from .diffusion_layer import Encoder
 
-#TODO: 작동 확인
-# Diffusion 여러 개 다루는 클래스
-class Diffusions(L.LightningModule):
-    def __init__(self, config:Config):
-        super().__init__()
-        self.save_hyperparameters()
-        
-        #TODO: LM+AE 정의
-        self.encoder = None
-        
-        self.model = GaussianDiffusion(
-            self.diffusion,
-            max_seq_len = config.max_seq_len,
-            sampling_timesteps = config.sampling_timesteps,
-            sampler = config.sampler,
-            train_schedule= config.train_schedule, 
-            sampling_schedule= config.sampling_schedule,
-            loss_type = config.loss_type,   # L1 or L2
-            objective = config.objective,
-            train_prob_self_cond = config.train_prob_self_cond,
-            seq2seq_unconditional_prob = config.seq2seq_unconditional_prob,
-            scale = config.scale,)
-        
-        self.loss = None
-        
-    def forward(self, inputs):
-        return self.model(
-            txt_latent=inputs['txt_latent'],
-            mask=inputs['mask'],
-            class_id=inputs['class_id']
-            )
-
-    def training_step(self, batch, batch_idx):
-        inputs = batch
-        loss = self.forward(inputs)
-        return loss
-
-    def configure_optimizers(self):
-        return torch.optim.SGD(self.model.parameters(), lr=0.1)
-
-"""================================================================================================="""
 
 #TODO: Diffusion code 다듬기
 class SinusoidalPosEmb(nn.Module):
@@ -72,6 +32,8 @@ class SinusoidalPosEmb(nn.Module):
         emb = x[:, None] * emb[None, :]
         emb = torch.cat((emb.sin(), emb.cos()), dim=-1)
         return emb
+
+
     
 class DiffusionTransformer(nn.Module):
     def __init__(
@@ -126,8 +88,20 @@ class DiffusionTransformer(nn.Module):
             )
 
         self.pos_emb = AbsolutePositionalEmbedding(tx_dim, max_seq_len)
-        
         self.cross = seq2seq
+        
+        self.encoder = Encoder(
+            dim=tx_dim,
+            depth=tx_depth,
+            heads=heads,
+            attn_dropout = dropout,    # dropout post-attention
+            ff_dropout = dropout,       # feedforward dropout
+            rel_pos_bias=False,
+            ff_glu=True,
+            cross_attend=self.cross,
+            time_emb_dim=tx_dim*4 if self.scale_shift else None,
+            num_dense_connections=num_dense_connections,
+        )
 
         if self.class_conditional:
             assert num_classes > 0
@@ -290,36 +264,22 @@ class GaussianDiffusion(nn.Module):
     def __init__(
         self,
         config:Config,
-        *,
-        max_seq_len,
-        sampling_timesteps = 250,
-        loss_type = 'l1',
-        objective = 'pred_noise',
-        train_schedule = 'cosine',
-        sampling_schedule = None,
-        scale = 1.,
-        sampler = 'ddpm',
-        train_prob_self_cond = 0.5,
-        seq2seq_unconditional_prob = 0.1,
     ):
         super().__init__()
-        assert sampler in {'ddim', 'ddpm', 'dpmpp'}, 'sampler must be one of ddim, ddpm, dpmpp'
-        self.sampler = sampler
-
         self.diffusion_model = DiffusionTransformer(
             tx_dim = config.tx_dim,
             tx_depth = config.tx_depth,
             heads = config.tx_dim // config.attn_head_dim,
             latent_dim = config.latent_dim,
-            max_seq_len = config.max_seq_len,
+            max_seq_len = config.num_encoder_latents,
             self_condition = config.self_condition,
             scale_shift = config.scale_shift,
-            dropout = 0 if config.disable_dropout else 0.1,
+            dropout = config.dropout,
             class_conditional= config.class_conditional,
             num_classes= config.num_classes,    # the number of classes if class conditional else 0
             class_unconditional_prob= config.class_unconditional_prob,
             seq2seq=(config.dataset_name in {'xsum', 'qqp', 'qg', 'wmt14-de-en', 'wmt14-en-de'}),
-            seq2seq_context_dim=config.lm_dim, 
+            seq2seq_context_dim=config.lm_dim,
             num_dense_connections=config.num_dense_connections,)
             
         if self.diffusion_model.class_conditional:
@@ -328,36 +288,24 @@ class GaussianDiffusion(nn.Module):
 
         self.latent_dim = self.diffusion_model.latent_dim
         self.self_condition = self.diffusion_model.self_condition
-
-        self.max_seq_len = max_seq_len
+        self.max_seq_len = config.num_encoder_latents
         self.l2_normalize = False
+        self.objective = config.objective
+        self.loss_type = config.loss_type
+        assert self.objective in {'pred_noise', 'pred_x0', 'pred_v', 'pred_v_dual'}, 'objective must be one of pred_noise, pred_x0, pred_v, pred_v_dual'
 
-        self.objective = objective
-
-        self.loss_type = loss_type
-
-        assert objective in {'pred_noise', 'pred_x0', 'pred_v', 'pred_v_dual'}, 'objective must be one of pred_noise, pred_x0, pred_v, pred_v_dual'
-
-        alpha_schedule = cosine_schedule
-        self.train_schedule = partial(time_to_alpha, alpha_schedule=alpha_schedule, scale=scale)
+        self.train_schedule = partial(time_to_alpha, alpha_schedule=cosine_schedule, scale=config.scale)
         # Sampling schedule
-        sampling_alpha_schedule = cosine_schedule
-        self.sampling_schedule = partial(time_to_alpha, alpha_schedule=sampling_alpha_schedule, scale=scale)
-        
-        self.scale = scale
-
-        # gamma schedules
-
-        self.sampling_timesteps = sampling_timesteps
+        self.sampling_schedule = partial(time_to_alpha, alpha_schedule=cosine_schedule, scale=config.scale)
+        self.sampling_timesteps = config.sampling_timesteps
 
         # probability for self conditioning during training
-
-        self.train_prob_self_cond = train_prob_self_cond
-        self.seq2seq_unconditional_prob = seq2seq_unconditional_prob
+        self.train_prob_self_cond = config.train_prob_self_cond
 
         # Buffers for latent mean and scale values
         self.register_buffer('latent_mean', torch.tensor([0]*self.latent_dim).to(torch.float32))
         self.register_buffer('latent_scale', torch.tensor(1).to(torch.float32))
+
 
     def predict_start_from_noise(self, z_t, t, noise, sampling=False):
         time_to_alpha = self.sampling_schedule if sampling else self.train_schedule

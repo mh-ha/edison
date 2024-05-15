@@ -46,14 +46,14 @@ def get_dataset(dataset_name, data_path=None):
 
 def get_dataloader(config:Config, dataset, decoder_start_token_id, tokenizer, max_seq_len, mode='diffusion', shuffle=True, context_tokenizer=None):
     def tokenization(example):
-        if mode == 'diffusion' and config.train_data in {'xsum', 'qqp'}:
+        if mode == 'diffusion' and config.dataset_name in {'xsum', 'qqp'}:
             assert context_tokenizer is not None
             source = example['context']
             target = example['text']
 
-            if config.train_data in {'qqp',}:
+            if config.dataset_name in {'qqp',}:
                 cond_inputs = context_tokenizer(source, padding="max_length", truncation=True, max_length=max_seq_len)
-            elif config.train_data in {'xsum',}:
+            elif config.dataset_name in {'xsum',}:
                 cond_inputs = context_tokenizer(source, padding="max_length", truncation=True, max_length=max_seq_len*4)
             else:
                 raise NotImplementedError
@@ -71,7 +71,7 @@ def get_dataloader(config:Config, dataset, decoder_start_token_id, tokenizer, ma
 
     collate_fn=DataCollatorForBartDenoisingLM(tokenizer, decoder_start_token_id)
     
-    if config.train_data in {'xsum', 'qqp'}:
+    if config.dataset_name in {'xsum', 'qqp'}:
         dataset = dataset.map(tokenization, remove_columns=['text', 'context'], batched=True, num_proc=None)
     else:
         dataset = dataset.map(tokenization, remove_columns='text')
