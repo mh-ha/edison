@@ -27,8 +27,8 @@ import yaml
 import lightning as L
 from transformers import AutoTokenizer
 from edison.config.config import Config
-from edison.first.module import LM
-from edison.first.datamodule import LMDataModule
+from edison.modules.lm import LM
+from edison.data.datamodule import LMDataModule
 
 
 def main():
@@ -43,7 +43,7 @@ def main():
     parser.add_argument('--absolute_position_biased_input', type=bool, default=True)
     parser.add_argument('--num_heads', type=int, default=12)
     parser.add_argument('--num_head_dim', type=int, default=64)
-    parser.add_argument('--layernorm_eps', type=float, default=1e-9)
+    parser.add_argument('--layernorm_eps', type=float, default=1e-6)
     parser.add_argument('--hidden_dropout_prob', type=float, default=0.1)
     parser.add_argument('--num_hidden_layers', type=int, default=12)
     parser.add_argument('--device', type=str, default='cuda')
@@ -52,9 +52,11 @@ def main():
     parser.add_argument('--max_preds_per_seq', type=int, default=None)
     parser.add_argument('--learning_rate', type=float, default=1e-4)
     parser.add_argument('--batch_size', type=int, default=4)
+    parser.add_argument('--gradient_accumulation_steps', type=int, default=256)
     parser.add_argument('--gradient_clip_val', type=float, default=1.0)
     parser.add_argument('--gradient_clip_algorithm', type=str, default='norm')
     parser.add_argument('--tokenizer_name', type=str, default='microsoft/deberta-v3-base')
+    parser.add_argument('--load_pretrained_weights', type=bool, default=False)
     args = parser.parse_args()
 
     trainer_config = yaml.safe_load(open(args.trainer_config, 'r'))
@@ -79,15 +81,20 @@ def main():
         max_preds_per_seq=args.max_preds_per_seq,
         learning_rate=args.learning_rate,
         batch_size=args.batch_size,
+        gradient_accumulation_steps=args.gradient_accumulation_steps,
         gradient_clip_val=args.gradient_clip_val,
         gradient_clip_algorithm=args.gradient_clip_algorithm,
-        tokenizer_name=args.tokenizer_name
+        tokenizer_name=args.tokenizer_name,
+        load_pretrained_weights=args.load_pretrained_weights,
     )
     print(trainer_config)
     print(config)
-    model = LM(config)
     tokenizer = AutoTokenizer.from_pretrained(config.tokenizer_name)
     data_module = LMDataModule(config, tokenizer)
+    model = LM(config)
+    if config.load_pretrained_weights:
+        from edison.modules.load_state import load_pretrained_LM
+        model, _, _ = load_pretrained_LM(model, config)
     trainer = L.Trainer(**trainer_config)
     trainer.fit(model, datamodule=data_module)
 
