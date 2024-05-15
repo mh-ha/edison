@@ -365,8 +365,13 @@ class PerceiverAutoEncoder(nn.Module):
         return self.perceiver_encoder(encoder_outputs, mask=attention_mask.bool())
 
     def forward(self, encoder_outputs, attention_mask):
+        # print(f"input: {encoder_outputs.shape}")
         encoder_latents = self.perceiver_encoder(
             encoder_outputs, mask=attention_mask.bool())
-        return self.perceiver_decoder(encoder_latents)
+        # print(f"encoder_latents: {encoder_latents.shape}")
+        # return self.perceiver_decoder(encoder_latents)
+        decoder_outputs = self.perceiver_decoder(encoder_latents)
+        # print(f"decoder_outputs: {decoder_outputs.shape}")
+        return decoder_outputs
         
 

@@ -7,12 +7,15 @@
     3) edison - AE
     4) edison - Diffusion
 """
+import os
+os.environ['CURL_CA_BUNDLE'] = ''
 
-from modules.lm import get_BART
-from modules.ae import PerceiverAutoEncoder
-from modules.lightning_modules import LD4LGAE
-from trainer import get_trainer
-from config.config import Config
+from .modules.lm import get_BART
+from .modules.ae import PerceiverAutoEncoder
+from .modules.lightning_modules import LD4LGAE
+from .modules.lightning_data_module import get_dataset, get_dataloader
+from .trainer import get_trainer
+from .config.config import Config
 
 class TrainFunction:
     def __init__(self, config:Config):
@@ -22,11 +25,10 @@ class TrainFunction:
         1. load data along with config.train_data
         2. init lightning data module
         """
-        #TODO
         self.trainer = get_trainer(config)
-        self.data_module = None
-    
-    def train_LD4LG_AE(self, config:Config):
+        self.dataset = get_dataset(config.train_data)['train']
+
+    def train_LD4LG_AE(self):
         """
         1. init LM
         2. init AE
@@ -38,21 +40,31 @@ class TrainFunction:
         
         # 2. init AE
         ae = PerceiverAutoEncoder(
-            dim_lm=config.d_model,
-            num_encoder_latents=config.num_encoder_latents,
-            num_decoder_latents=config.num_decoder_latents,
-            dim_ae=config.dim_ae,
-            depth=config.num_layers,
-            transformer_decoder=config.transformer_decoder,
-            l2_normalize_latents=config.l2_normalize_latents)
+            dim_lm=self.config.d_model,
+            dim_ae=self.config.dim_ae,
+            depth=self.config.num_layers,
+            num_encoder_latents=self.config.num_encoder_latents,
+            num_decoder_latents=self.config.num_decoder_latents,
+            transformer_decoder=self.config.transformer_decoder,
+            l2_normalize_latents=self.config.l2_normalize_latents)
 
         # 3. init lightning module using LM and AE
-        model = LD4LGAE(config, lm, ae)
+        # training_step: inputs['input_ids', 'attention_mask'], target -> loss
+        # forward: inputs['input_ids', 'attention_mask'] -> encoder_outputs
+        model = LD4LGAE(self.config, lm, ae)
         
-        # 4. train
-        self.trainer.fit(model, datamodule=self.data_module)
+        # 4. init data loader
+        self.dataset = get_dataloader(
+            self.config,
+            self.dataset,
+            lm._get_decoder_start_token_id(),
+            tokenizer,
+            self.config.max_seq_len)
+        
+        # 5. train
+        self.trainer.fit(model, train_dataloaders=self.dataset)
     
-    def train_LD4LG_Diffusion(self, config:Config):
+    def train_LD4LG_Diffusion(self):
         """
         1. init LM
         2. init pretrained AE
@@ -61,7 +73,7 @@ class TrainFunction:
         6. train
         """
     
-    def train_edison_AE(self, config:Config):
+    def train_edison_AE(self):
         """
         1. init LM
         2. init AE
@@ -69,7 +81,7 @@ class TrainFunction:
         5. train
         """
         
-    def train_edison_Diffusion(self, config:Config):
+    def train_edison_Diffusion(self):
         """
         1. init LM
         2. init pretrained AE
@@ -79,19 +91,19 @@ class TrainFunction:
 
 
 def main(config:Config):
-    train_function = TrainFunction()
+    train_function = TrainFunction(config)
     if config.model_name == 'LD4LG':
         if config.train_for == 'AE':
-            train_function.train_LD4LG_AE(config)
+            train_function.train_LD4LG_AE()
         elif config.train_for == 'Diffusion':
-            train_function.train_LD4LG_Diffusion(config)
+            train_function.train_LD4LG_Diffusion()
         else:
             raise ValueError(f'{config.train_for} is not supported')
     elif config.model_name == 'edison':
         if config.train_for == 'AE':
-            train_function.train_edison_AE(config)
+            train_function.train_edison_AE()
         elif config.train_for == 'Diffusion':
-            train_function.train_edison_Diffusion(config)
+            train_function.train_edison_Diffusion()
         else:
             raise ValueError(f'{config.train_for} is not supported')
     else:

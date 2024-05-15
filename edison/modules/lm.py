@@ -12,7 +12,7 @@ from transformers.models.bart.modeling_bart import (
 )
 
 #TODO: 동작 확인
-def get_BART(model_path:str='facebook/bart-large'):
+def get_BART(model_path:str='facebook/bart-base'):
     model = BartForConditionalGeneration.from_pretrained(model_path)
     tokenizer = AutoTokenizer.from_pretrained(model_path)
     return model, tokenizer
