@@ -373,5 +373,50 @@ class PerceiverAutoEncoder(nn.Module):
         decoder_outputs = self.perceiver_decoder(encoder_latents)
         # print(f"decoder_outputs: {decoder_outputs.shape}")
         return decoder_outputs
+
+
+class PerceiverAutoEncoderForEdison(nn.Module):
+    def __init__(
+        self,
+        *,
+        dim_lm,
+        dim_ae,
+        depth,
+        dim_head=64,
+        num_encoder_latents=8,
+        num_decoder_latents=32,
+        max_seq_len=64,
+        ff_mult=4,
+        encoder_only=False,
+        transformer_decoder=False,
+        l2_normalize_latents=False,
+    ):
+        super().__init__()
+        self.encoder_only = encoder_only
+        if self.encoder_only:
+            assert dim_ae == dim_lm
+        self.perceiver_encoder = PerceiverResampler(dim=dim_lm, dim_latent=dim_ae, depth=depth, dim_head=dim_head,
+                                                    num_latents=num_encoder_latents, max_seq_len=max_seq_len, ff_mult=ff_mult, l2_normalize_latents=l2_normalize_latents)
+        if transformer_decoder:
+            self.perceiver_decoder = Transformer(dim_input=dim_ae, dim_tx=dim_lm, depth=depth, dim_head=dim_head, max_seq_len=num_encoder_latents, ff_mult=ff_mult)
+        else:
+            self.perceiver_decoder = PerceiverResampler(dim=dim_ae, dim_latent=dim_lm, depth=depth, dim_head=dim_head,
+                                                        num_latents=num_decoder_latents, max_seq_len=num_encoder_latents, ff_mult=ff_mult)
+
+    def decode(self, ae_latent):
+        return self.perceiver_decoder(ae_latent)
+    
+    def encode(self, encoder_outputs, attention_mask):
+        return self.perceiver_encoder(encoder_outputs, mask=attention_mask.bool())
+
+    def forward(self, encoder_outputs, attention_mask):
+        # print(f"input: {encoder_outputs.shape}")
+        encoder_latents = self.perceiver_encoder(
+            encoder_outputs, mask=attention_mask.bool())
+        # print(f"encoder_latents: {encoder_latents.shape}")
+        # return self.perceiver_decoder(encoder_latents)
+        decoder_outputs = self.perceiver_decoder(encoder_latents)
+        # print(f"decoder_outputs: {decoder_outputs.shape}")
+        return decoder_outputs
         
 

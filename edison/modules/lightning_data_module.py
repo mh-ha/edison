@@ -87,7 +87,7 @@ def get_dataloader(config:Config, dataset, decoder_start_token_id, tokenizer, ma
         )
     return dl
 
-def get_xtdataloader(config:Config, dataset, decoder_start_token_id, tokenizer, max_seq_len, token_converter, mode='diffusion', shuffle=True, context_tokenizer=None):
+def get_xtdataloader(config:Config, dataset, decoder_start_token_id, tokenizer, max_seq_len, min_buffer_size, mode='diffusion', shuffle=True, context_tokenizer=None):
     def tokenization(example):
         if mode == 'diffusion' and config.dataset_name in {'xsum', 'qqp'}:
             assert context_tokenizer is not None
@@ -110,9 +110,16 @@ def get_xtdataloader(config:Config, dataset, decoder_start_token_id, tokenizer, 
             return model_inputs
         else:
             text = example["text"]
-        return tokenizer(text, padding="max_length", truncation=True, max_length=max_seq_len)
+        
+        # add extra padding tokens for buffer
+        text = text[:max_seq_len]
+        return tokenizer(
+            text,
+            padding="max_length",
+            truncation=True,
+            max_length=max_seq_len+min_buffer_size)
 
-    collate_fn=DataCollatorForBartDenoisingLM(tokenizer, decoder_start_token_id, token_converter)
+    collate_fn=DataCollatorForBartDenoisingLM(tokenizer, decoder_start_token_id, config)
     
     if config.dataset_name in {'xsum', 'qqp'}:
         dataset = dataset.map(tokenization, remove_columns=['text', 'context'], batched=True, num_proc=None)
@@ -188,15 +195,19 @@ class DataCollatorForBartDenoisingLM:
 
     tokenizer: PreTrainedTokenizerBase
     decoder_start_token_id: int
-    token_converter: TokenConverter = None
+    config: Config = None
+    vocab = tokenizer.vocab()
 
     def __call__(self, examples: List[Dict[str, List[int]]]) -> BatchEncoding:
         batch = BatchEncoding(
             {k: torch.LongTensor([examples[i][k] for i in range(len(examples))]) for k, v in examples[0].items()}
         )
-        # 1. position 정의: token 위치
-        # 2. padding -> buffer 변환
-        # 3. conscious 정의: mask 이용
+        """
+        2. padding -> buffer 변환
+            (max_seq_len, max_all_len 따로 -> 최소한의 buffer 크기 확보)
+        4. 여기서는 buffer word를 추가하는 것만, p와 c는 diffusion 입력 직전에 계산
+            (using attention_mask(c), consistent position(p))
+        """
 
         batch["labels"] = batch["input_ids"].clone()
         batch["decoder_input_ids"] = shift_tokens_right(
@@ -207,5 +218,23 @@ class DataCollatorForBartDenoisingLM:
 
         batch["attention_mask"] = (batch["input_ids"] != self.tokenizer.pad_token_id).long()
         batch["decoder_attention_mask"] = (batch["decoder_input_ids"] != self.tokenizer.pad_token_id).long()
-
+        
+        # add buffer words
+        if self.config is not None:
+            sampled_words = self.sample_words_from_vocab_and_batch(batch)
+            batch = self.replace_pad_to_sampled_word(batch, sampled_words)
+        return batch
+    
+    def sample_words_from_vocab_and_batch(self, batch):
+        num_sampling = torch.sum((batch["attention_mask"] == 0).long())
+        batch_words = set(batch["input_ids"][batch["attention_mask"]]) - {self.tokenizer.pad_token_id}
+        vocab_words = self.vocab
+        ratio = self.config.buffer_sampling_ratio
+        #TODO: sample from batch_words, vocab_words using ratio
+        sampled_words =
+        return sampled_words
+    
+    def replace_pad_to_sampled_word(self, batch, sampled_words):
+        #TODO: replace pad_token_ids to sampled words
+        
         return batch

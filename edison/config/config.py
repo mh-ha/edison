@@ -3,7 +3,7 @@ from dataclasses import dataclass
 @dataclass
 class Config:
     #############################
-    # Basic information
+    # General
     model_name:str = 'LD4LG'
     train_for:str = 'Diffusion'
     dataset_name:str = 'roc'
@@ -45,6 +45,10 @@ class Config:
     self_condition:bool = True
     scale_shift:bool = True
     num_dense_connections:int = 3
+    #############################
+    # Edison general
+    min_buffer_size:int = 5
+    buffer_sampling_ratio:float = 0.7   # ratio -> batch, (1-ratio) -> vocab
     #############################
     # hidden_dim:int
     # embedding_dim:int
