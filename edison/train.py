@@ -14,7 +14,8 @@ os.environ["TOKENIZERS_PARALLELISM"] = "false"
 from .modules.lm import get_BART
 from .modules.ae import PerceiverAutoEncoder
 from .modules.lightning_modules import LD4LGAE, LD4LGDiffusion
-from .modules.lightning_data_module import get_dataset, get_dataloader
+from .modules.lightning_data_module import get_dataset, get_dataloader, get_xtdataloader
+from .modules.tokens import TokenConverter
 from .trainer import get_trainer
 from .config.config import Config
 
@@ -110,8 +111,47 @@ class TrainFunction:
         2. init AE
         3. init lightning module using LM and AE
         4. init data loader
-        5. train
+        5. mapping data to xt_data
+        6. train
         """
+        # 1. init LM
+        lm, tokenizer = get_BART()
+        
+        # 2. init AE
+        ae = PerceiverAutoEncoderForXT(
+            dim_lm=self.config.d_model,
+            dim_ae=self.config.dim_ae,
+            depth=self.config.num_layers,
+            num_encoder_latents=self.config.num_encoder_latents,
+            num_decoder_latents=self.config.num_decoder_latents,
+            transformer_decoder=self.config.transformer_decoder,
+            l2_normalize_latents=self.config.l2_normalize_latents)
+
+        # 3. init lightning module using LM and AE
+        # training_step: inputs['input_ids', 'attention_mask'], target -> loss
+        # forward: inputs['input_ids', 'attention_mask'] -> encoder_outputs
+        model = EdisonAE(self.config, lm, ae)
+        
+        # 4. init data loader
+        self.dataloader = get_xtdataloader(
+            self.config,
+            self.dataset['train'],
+            lm._get_decoder_start_token_id(),
+            tokenizer,
+            self.config.max_seq_len,
+            mode='ae',
+            token_converter=TokenConverter())
+        
+        # 5. mapping data to xt_data
+        self.dataloader = self.dataloader.map(
+            model.tokens_to_xtokens,
+            batched=True,
+            batch_size=self.config.batch_size,
+            remove_columns=['input_ids', 'attention_mask', 'labels'],
+            num_proc=self.config.num_workers)
+        
+        # 6. train
+        self.trainer.fit(model, train_dataloaders=self.dataloader)
         
     def train_edison_Diffusion(self):
         """

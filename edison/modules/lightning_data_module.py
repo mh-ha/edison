@@ -15,6 +15,7 @@ from transformers import AutoTokenizer, BatchEncoding, PreTrainedTokenizerBase
 from transformers.models.bart.modeling_bart import BartForConditionalGeneration, shift_tokens_right
 
 from ..config.config import Config
+from .tokens import TokenConverter
 
 def get_dataset(dataset_name, data_path=None):
     if dataset_name == 'roc':
@@ -86,6 +87,47 @@ def get_dataloader(config:Config, dataset, decoder_start_token_id, tokenizer, ma
         )
     return dl
 
+def get_xtdataloader(config:Config, dataset, decoder_start_token_id, tokenizer, max_seq_len, token_converter, mode='diffusion', shuffle=True, context_tokenizer=None):
+    def tokenization(example):
+        if mode == 'diffusion' and config.dataset_name in {'xsum', 'qqp'}:
+            assert context_tokenizer is not None
+            source = example['context']
+            target = example['text']
+
+            if config.dataset_name in {'qqp',}:
+                cond_inputs = context_tokenizer(source, padding="max_length", truncation=True, max_length=max_seq_len)
+            elif config.dataset_name in {'xsum',}:
+                cond_inputs = context_tokenizer(source, padding="max_length", truncation=True, max_length=max_seq_len*4)
+            else:
+                raise NotImplementedError
+
+            model_inputs = tokenizer(text_target=target, padding="max_length", truncation=True, max_length=max_seq_len)
+            
+            # Add model target to model inputs
+            for k in cond_inputs.keys():
+                model_inputs[f'cond_{k}'] = cond_inputs[k]
+
+            return model_inputs
+        else:
+            text = example["text"]
+        return tokenizer(text, padding="max_length", truncation=True, max_length=max_seq_len)
+
+    collate_fn=DataCollatorForBartDenoisingLM(tokenizer, decoder_start_token_id, token_converter)
+    
+    if config.dataset_name in {'xsum', 'qqp'}:
+        dataset = dataset.map(tokenization, remove_columns=['text', 'context'], batched=True, num_proc=None)
+    else:
+        dataset = dataset.map(tokenization, remove_columns='text')
+            
+    dl = DataLoader(
+            dataset,
+            collate_fn=collate_fn,
+            batch_size=config.train_batch_size,
+            shuffle=shuffle,
+            pin_memory = True,
+            num_workers = 4
+        )
+    return dl
 
 def process_roc_dataset(dataset):
     def extract_roc_text(example):
@@ -146,11 +188,15 @@ class DataCollatorForBartDenoisingLM:
 
     tokenizer: PreTrainedTokenizerBase
     decoder_start_token_id: int
+    token_converter: TokenConverter = None
 
     def __call__(self, examples: List[Dict[str, List[int]]]) -> BatchEncoding:
         batch = BatchEncoding(
             {k: torch.LongTensor([examples[i][k] for i in range(len(examples))]) for k, v in examples[0].items()}
         )
+        # 1. position 정의: token 위치
+        # 2. padding -> buffer 변환
+        # 3. conscious 정의: mask 이용
 
         batch["labels"] = batch["input_ids"].clone()
         batch["decoder_input_ids"] = shift_tokens_right(
