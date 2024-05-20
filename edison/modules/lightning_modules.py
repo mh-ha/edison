@@ -1,5 +1,4 @@
 """
-
     LM Encoder      (batch, seq_len_lm, d_model)
     -> AE Encoder   (batch, seq_len_ae=32, d_ae=64)
     -> Diffusion    (batch, seq_len_ae, d_ae) (내부적으로 dimention for diffusion 있음)
