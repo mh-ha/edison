@@ -118,7 +118,6 @@ class TrainFunction:
         lm, tokenizer = get_BART()
         
         # 2. init AE
-        #TODO
         ae = PerceiverAutoEncoderForEdison(
             dim_lm=self.config.d_model,
             dim_ae=self.config.dim_ae,
@@ -126,12 +125,13 @@ class TrainFunction:
             num_encoder_latents=self.config.num_encoder_latents,
             num_decoder_latents=self.config.num_decoder_latents,
             transformer_decoder=self.config.transformer_decoder,
-            l2_normalize_latents=self.config.l2_normalize_latents)
+            l2_normalize_latents=self.config.l2_normalize_latents,
+            encoding_mode=self.config.encoding_mode
+            )
 
         # 3. init lightning module using LM and AE
         # training_step: inputs['input_ids', 'attention_mask'], target -> loss
         # forward: inputs['input_ids', 'attention_mask'] -> encoder_outputs
-        #TODO
         model = EdisonAE(self.config, lm, ae)
         
         # 4. init data loader
@@ -167,7 +167,9 @@ class TrainFunction:
             num_encoder_latents=self.config.num_encoder_latents,
             num_decoder_latents=self.config.num_decoder_latents,
             transformer_decoder=self.config.transformer_decoder,
-            l2_normalize_latents=self.config.l2_normalize_latents)
+            l2_normalize_latents=self.config.l2_normalize_latents,
+            encoding_mode=self.config.encoding_mode
+            )
         model = EdisonAE(self.config, lm, ae)
         
         # 3-4. init lightning module using LM, AE, Diffusion

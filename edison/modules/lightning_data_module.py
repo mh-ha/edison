@@ -196,26 +196,19 @@ class DataCollatorForBartDenoisingLM:
     tokenizer: PreTrainedTokenizerBase
     decoder_start_token_id: int
     config: Config = None
-    vocab = tokenizer.vocab()
+    # vocab = tokenizer.get_vocab()
+    vocab_size = len(tokenizer)
 
     def __call__(self, examples: List[Dict[str, List[int]]]) -> BatchEncoding:
         batch = BatchEncoding(
             {k: torch.LongTensor([examples[i][k] for i in range(len(examples))]) for k, v in examples[0].items()}
         )
-        """
-        2. padding -> buffer 변환
-            (max_seq_len, max_all_len 따로 -> 최소한의 buffer 크기 확보)
-        4. 여기서는 buffer word를 추가하는 것만, p와 c는 diffusion 입력 직전에 계산
-            (using attention_mask(c), consistent position(p))
-        """
 
         batch["labels"] = batch["input_ids"].clone()
         batch["decoder_input_ids"] = shift_tokens_right(
             batch["labels"], self.tokenizer.pad_token_id, self.decoder_start_token_id
         )
-
         batch['labels'][batch['labels'] == self.tokenizer.pad_token_id] = -100
-
         batch["attention_mask"] = (batch["input_ids"] != self.tokenizer.pad_token_id).long()
         batch["decoder_attention_mask"] = (batch["decoder_input_ids"] != self.tokenizer.pad_token_id).long()
         
@@ -228,13 +221,29 @@ class DataCollatorForBartDenoisingLM:
     def sample_words_from_vocab_and_batch(self, batch):
         num_sampling = torch.sum((batch["attention_mask"] == 0).long())
         batch_words = set(batch["input_ids"][batch["attention_mask"]]) - {self.tokenizer.pad_token_id}
-        vocab_words = self.vocab
         ratio = self.config.buffer_sampling_ratio
-        #TODO: sample from batch_words, vocab_words using ratio
-        sampled_words =
+        num_sample_from_vocab = int(num_sampling * ratio)
+        num_sample_from_batch = num_sampling - num_sample_from_vocab
+        # sample from batch_words, vocab_words using ratio
+        sampled_words = torch.LongTensor(
+            [random.choice(list(range(self.vocab_size))) for _ in range(num_sample_from_vocab)] +
+            [random.choice(list(batch_words)) for _ in range(num_sample_from_batch)]
+            ).to(batch["input_ids"].device)
+        # shuffle sampled_words
+        sampled_words = sampled_words[torch.randperm(len(sampled_words))]
         return sampled_words
-    
-    def replace_pad_to_sampled_word(self, batch, sampled_words):
-        #TODO: replace pad_token_ids to sampled words
         
-        return batch
+    def replace_pad_to_sampled_word(self, batch, sampled_words):
+        # replace pad_token_ids to sampled words
+        input_ids = batch["input_ids"].clone()
+        attention_mask = batch["attention_mask"].clone()
+        input_ids[attention_mask == 0] = sampled_words
+        return BatchEncoding(
+            {
+                "input_ids": input_ids,
+                "labels": batch["labels"],
+                "decoder_input_ids": batch["decoder_input_ids"],
+                "attention_mask": attention_mask,
+                "decoder_attention_mask": batch["decoder_attention_mask"],
+            }
+        )

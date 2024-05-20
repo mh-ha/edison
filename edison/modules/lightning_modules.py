@@ -17,14 +17,16 @@ edison
         embedding diffusion     (batch, seq_len_lm, d_embed(=d_model?)) -> (batch, seq_len_lm, d_diff) -> (batch, seq_len_lm, d_embed(=d_model?))
 
 TODO
-    1. data to xt_data logic
+    1. data to xt_data logic    ##TODO 구현 완료, 테스트 필요
         result: input_ids that replace pad_ids to sampled buffer words
-    2. build LM, AE -> LM은 그대로 써도 됨, AE는 조정 필요(sentence 부분, buffer 부분 나눠서 계산하는 로직 등 옵션 3개)
+    2. build LM, AE -> LM은 그대로 써도 됨, AE는 조정 필요(sentence 부분, buffer 부분 나눠서 계산하는 로직 등 옵션 3개) ##TODO 구현 완료, 테스트 필요
         result: AE with 3 options
-    3. build Diffusions -> LD4LG와 비슷한 것, embedding을 위한 것 각각
+    3. build Diffusions -> LD4LG와 비슷한 것, embedding을 위한 것 각각  ##TODO 구현 완료, 테스트 필요
         result: context diffusion, embedding diffusion
-    4. processing Diffusions together -> 여러 개의 옵션 중 하나 선택 가능하도록
+    4. processing Diffusions together -> 여러 개의 옵션 중 하나 선택 가능하도록 ##TODO 일부 구현 완료, 테스트 필요
         result: diffusion training logic
+    5. p, c 구현, 처리 로직
+        result: word, p, c, processing logic
 """
 
 
@@ -146,7 +148,6 @@ class LD4LGDiffusion(L.LightningModule):
         return torch.optim.AdamW(self.diffusion_model.parameters(), lr=self.config.learning_rate)
 
 
-#TODO
 class EdisonAE(L.LightningModule):
     def __init__(
         self,
@@ -176,13 +177,16 @@ class EdisonAE(L.LightningModule):
             attention_mask=attention_masks)
         return encoder_outputs
     
-    def encode(self, input_ids, attention_masks):
+    def encode(self, input_ids, attention_masks, return_embeddings=False):
         encoder_outputs = self.lm.get_encoder()(
             input_ids=input_ids,
             attention_mask=attention_masks)
         encoder_outputs = self.ae.encode(
             encoder_outputs['last_hidden_state'],
             attention_mask=attention_masks)
+        if return_embeddings:
+            embeddings = self.lm.embeddings.word_embeddings(input_ids)
+            return encoder_outputs, embeddings
         return encoder_outputs
 
     def decode(self, encoder_outputs):
@@ -223,36 +227,66 @@ class EdisonDiffusion(L.LightningModule):
     def __init__(
         self,
         config:Config,
-        autoencoder:LD4LGAE,
+        autoencoder:EdisonAE,
         ):
         super().__init__()
         self.save_hyperparameters('config')
         self.config = config
+        self.diffusion_mode = config.diffusion_mode
         self.autoencoder = autoencoder
         self.autoencoder.freeze()
-        self.context_diffusion_model = GaussianDiffusion(config=config)
-        self.embedding_diffusion_model = GaussianDiffusion(config=config)
+        self.context_diffusion_model = GaussianDiffusion(config=config, diffusion_type='context')
+        self.embedding_diffusion_model = GaussianDiffusion(config=config, diffusion_type='embedding')
         
-    def forward(self, encoder_outputs, class_id=None):
-        mask = torch.ones(
+    def forward(self, embedding_outputs, encoder_outputs, class_id=None):
+        attention_mask = torch.ones(
             encoder_outputs.shape[0],
             self.config.num_encoder_latents,
             dtype=torch.bool,
             device=encoder_outputs.device,)
-        return self.diffusion_model(
-            txt_latent=encoder_outputs,
-            mask=mask,
-            class_id=class_id
-            )
+        
+        #TODO: p, c 구현, 처리 필요
+        if self.diffusion_mode == 'same':
+            context_latents = self.context_diffusion_model(
+                txt_latent=encoder_outputs,
+                mask=attention_mask,
+                class_id=class_id,
+                seq2seq_cond=embedding_outputs,
+                seq2seq_cond_mask=attention_mask,
+                )
+            embedding_latents = self.embedding_diffusion_model(
+                txt_latent=embedding_outputs,
+                mask=attention_mask,
+                class_id=class_id,
+                seq2seq_cond=encoder_outputs,
+                seq2seq_cond_mask=attention_mask,
+                )
+            return context_latents, embedding_latents
+        
+        #TODO(P1): context와 embedding을 처리하는 로직 필요 - 'same', 'context_first', 'alternately'
+        # elif self.diffusion_mode == 'context_first':
+            
+        # elif self.diffusion_mode == 'alternately':
+            
+        else:
+            raise ValueError(f"diffusion_mode: {self.diffusion_mode} not supported")
+        # return self.diffusion_model(
+        #     txt_latent=encoder_outputs,
+        #     mask=attention_mask,
+        #     class_id=class_id
+        #     )
         
     def training_step(self, batch, batch_idx):
         inputs = batch['input_ids']
         attention_masks = batch['attention_mask']
         class_id = batch['label'] if 'label' in batch else None
-        encoder_outputs = self.autoencoder.encode(inputs, attention_masks)
-        loss = self.forward(encoder_outputs, class_id)
+        encoder_outputs, embedding_outputs = self.autoencoder.encode(inputs, attention_masks, return_embeddings=True)
+        loss = self.forward(embedding_outputs, encoder_outputs, class_id)
         self.log('loss', loss, on_step=True, prog_bar=True)
         return loss
 
     def configure_optimizers(self):
-        return torch.optim.AdamW(self.diffusion_model.parameters(), lr=self.config.learning_rate)
+        return torch.optim.AdamW([
+            {'params': self.context_diffusion_model.parameters()},
+            {'params': self.embedding_diffusion_model.parameters()},
+            ], lr=self.config.learning_rate)

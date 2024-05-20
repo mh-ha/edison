@@ -88,7 +88,6 @@ class DiffusionTransformer(nn.Module):
             )
 
         self.pos_emb = AbsolutePositionalEmbedding(tx_dim, max_seq_len)
-        self.cross = seq2seq
         
         self.encoder = Encoder(
             dim=tx_dim,
@@ -98,7 +97,7 @@ class DiffusionTransformer(nn.Module):
             ff_dropout = dropout,       # feedforward dropout
             rel_pos_bias=False,
             ff_glu=True,
-            cross_attend=self.cross,
+            cross_attend=self.seq2seq,
             time_emb_dim=tx_dim*4 if self.scale_shift else None,
             num_dense_connections=num_dense_connections,
         )
@@ -264,23 +263,49 @@ class GaussianDiffusion(nn.Module):
     def __init__(
         self,
         config:Config,
+        diffusion_for:str=None,
     ):
         super().__init__()
-        self.diffusion_model = DiffusionTransformer(
-            tx_dim = config.tx_dim,
-            tx_depth = config.tx_depth,
-            heads = config.tx_dim // config.attn_head_dim,
-            latent_dim = config.latent_dim,
-            max_seq_len = config.num_encoder_latents,
-            self_condition = config.self_condition,
-            scale_shift = config.scale_shift,
-            dropout = config.dropout,
-            class_conditional= config.class_conditional,
-            num_classes= config.num_classes,    # the number of classes if class conditional else 0
-            class_unconditional_prob= config.class_unconditional_prob,
-            seq2seq=(config.dataset_name in {'xsum', 'qqp', 'qg', 'wmt14-de-en', 'wmt14-en-de'}),
-            seq2seq_context_dim=config.lm_dim,
-            num_dense_connections=config.num_dense_connections,)
+        if diffusion_for is not None:
+            assert diffusion_for in {'context', 'embedding'}, 'diffusion_for must be one of context, embedding'
+            self.diffusion_mode = config.diffusion_mode
+            if diffusion_for == 'context':
+                prefix = 'context_'
+            elif diffusion_for == 'embedding':
+                prefix = 'embedding_'
+            self.diffusion_model = DiffusionTransformer(
+                tx_dim = getattr(config, f'{prefix}tx_dim'),
+                tx_depth = getattr(config, f'{prefix}tx_depth'),
+                heads = getattr(config, f'{prefix}tx_dim') // getattr(config, f'{prefix}attn_head_dim'),
+                latent_dim = getattr(config, f'{prefix}latent_dim'),
+                max_seq_len = config.num_encoder_latents,
+                self_condition = getattr(config, f'{prefix}self_condition'),
+                scale_shift = getattr(config, f'{prefix}scale_shift'),
+                dropout = getattr(config, f'{prefix}dropout'),
+                class_conditional= getattr(config, f'{prefix}class_conditional'),
+                num_classes= getattr(config, f'{prefix}num_classes'),    # the number of classes if class conditional else 0
+                class_unconditional_prob= getattr(config, f'{prefix}class_unconditional_prob'),
+                seq2seq=True,   # always True when using edison
+                seq2seq_context_dim=getattr(config, f'{prefix}lm_dim'),
+                num_dense_connections=getattr(config, f'{prefix}num_dense_connections'),
+            )
+        else:
+            self.diffusion_mode = None
+            self.diffusion_model = DiffusionTransformer(
+                tx_dim = config.tx_dim,
+                tx_depth = config.tx_depth,
+                heads = config.tx_dim // config.attn_head_dim,
+                latent_dim = config.latent_dim,
+                max_seq_len = config.num_encoder_latents,
+                self_condition = config.self_condition,
+                scale_shift = config.scale_shift,
+                dropout = config.dropout,
+                class_conditional= config.class_conditional,
+                num_classes= config.num_classes,    # the number of classes if class conditional else 0
+                class_unconditional_prob= config.class_unconditional_prob,
+                seq2seq=(config.dataset_name in {'xsum', 'qqp', 'qg', 'wmt14-de-en', 'wmt14-en-de'}),
+                seq2seq_context_dim=config.lm_dim,
+                num_dense_connections=config.num_dense_connections,)
             
         if self.diffusion_model.class_conditional:
             if self.diffusion_model.class_unconditional_prob > 0:

@@ -1,9 +1,10 @@
 import math
+from typing import Literal
+
 import torch
 from torch import nn, einsum
 import torch.nn.functional as F
 import lightning as L
-
 from einops import rearrange, repeat
 
 from ..config.config import Config
@@ -387,27 +388,44 @@ class PerceiverAutoEncoderForEdison(nn.Module):
         num_decoder_latents=32,
         max_seq_len=64,
         ff_mult=4,
-        encoder_only=False,
         transformer_decoder=False,
         l2_normalize_latents=False,
+        encoding_mode:Literal['sentence_only', 'both_separately', 'both_together']='sentence_only',
     ):
         super().__init__()
-        self.encoder_only = encoder_only
-        if self.encoder_only:
-            assert dim_ae == dim_lm
-        self.perceiver_encoder = PerceiverResampler(dim=dim_lm, dim_latent=dim_ae, depth=depth, dim_head=dim_head,
-                                                    num_latents=num_encoder_latents, max_seq_len=max_seq_len, ff_mult=ff_mult, l2_normalize_latents=l2_normalize_latents)
+        self.encoding_mode = encoding_mode
+        self.perceiver_encoder = PerceiverResampler(
+            dim=dim_lm, dim_latent=dim_ae, depth=depth, dim_head=dim_head,
+            num_latents=num_encoder_latents, max_seq_len=max_seq_len, ff_mult=ff_mult, l2_normalize_latents=l2_normalize_latents)
+        if self.encoding_mode == 'both_separately':
+            self.perceiver_encoder_for_buffer = PerceiverResampler(
+                dim=dim_lm, dim_latent=dim_ae, depth=depth, dim_head=dim_head,
+                num_latents=num_encoder_latents, max_seq_len=max_seq_len, ff_mult=ff_mult, l2_normalize_latents=l2_normalize_latents)
         if transformer_decoder:
-            self.perceiver_decoder = Transformer(dim_input=dim_ae, dim_tx=dim_lm, depth=depth, dim_head=dim_head, max_seq_len=num_encoder_latents, ff_mult=ff_mult)
+            self.perceiver_decoder = Transformer(
+                dim_input=dim_ae, dim_tx=dim_lm, depth=depth,
+                dim_head=dim_head, max_seq_len=num_encoder_latents, ff_mult=ff_mult)
         else:
-            self.perceiver_decoder = PerceiverResampler(dim=dim_ae, dim_latent=dim_lm, depth=depth, dim_head=dim_head,
-                                                        num_latents=num_decoder_latents, max_seq_len=num_encoder_latents, ff_mult=ff_mult)
+            self.perceiver_decoder = PerceiverResampler(
+                dim=dim_ae, dim_latent=dim_lm, depth=depth, dim_head=dim_head,
+                num_latents=num_decoder_latents, max_seq_len=num_encoder_latents, ff_mult=ff_mult)
 
     def decode(self, ae_latent):
         return self.perceiver_decoder(ae_latent)
     
     def encode(self, encoder_outputs, attention_mask):
-        return self.perceiver_encoder(encoder_outputs, mask=attention_mask.bool())
+        if self.encoding_mode == 'both_together':
+            attention_mask = torch.ones_like(encoder_outputs)
+            encoder_outputs = self.perceiver_encoder(encoder_outputs, mask=attention_mask.bool())
+        elif self.encoding_mode == 'both_separately':
+            attention_mask_for_buffer = ~attention_mask.bool()
+            encoder_outputs = self.perceiver_encoder(encoder_outputs, mask=attention_mask.bool())
+            buffer_latents = self.perceiver_encoder_for_buffer(encoder_outputs, mask=attention_mask_for_buffer)
+            # sentence latents + buffer latents
+            encoder_outputs = encoder_outputs[attention_mask.bool()] + buffer_latents[attention_mask_for_buffer]
+        else:
+            encoder_outputs = self.perceiver_encoder(encoder_outputs, mask=attention_mask.bool())
+        return encoder_outputs
 
     def forward(self, encoder_outputs, attention_mask):
         # print(f"input: {encoder_outputs.shape}")

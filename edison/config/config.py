@@ -49,6 +49,59 @@ class Config:
     # Edison general
     min_buffer_size:int = 5
     buffer_sampling_ratio:float = 0.7   # ratio -> batch, (1-ratio) -> vocab
+    diffusion_mode:str = 'same' # 'same', 'context_first', 'alternately'
+    #############################
+    # Edison AE
+    d_model:int = 768
+    dim_ae:int = 64
+    num_layers:int = 3
+    num_encoder_latents:int = 32
+    num_decoder_latents:int = 32
+    transformer_decoder:bool = True
+    l2_normalize_latents:bool = True
+    encoding_mode:str = 'sentence_only'  # 'sentence_only', 'both_separately', 'both_together'
+    #############################
+    # Edison context Diffusion
+    context_pretrained_ae_path:str = ''
+    context_sampling_timesteps:int = 250
+    context_loss_type:str = 'l2'
+    context_objective:str = 'pred_v'
+    context_scale:float = 1.
+    context_train_prob_self_cond:float = 0.5
+    context_tx_dim:int = 768
+    context_tx_depth:int = 12
+    context_attn_head_dim:int = 64
+    context_latent_dim:int = 64     # must be equal to dim_ae
+    context_lm_dim:int = 768        # must be equal to lm dim(=d_model)
+    context_dropout:float = 0.1
+    context_class_conditional:bool = False
+    context_num_classes:int = 0     # depends on class_conditional and dataset_name
+    context_class_unconditional_prob:float = 0.1
+    context_num_samples:int = 1000
+    context_self_condition:bool = True
+    context_scale_shift:bool = True
+    context_num_dense_connections:int = 3
+    #############################
+    # Edison embedding Diffusion
+    embedding_pretrained_ae_path:str = ''
+    embedding_sampling_timesteps:int = 250
+    embedding_loss_type:str = 'l2'
+    embedding_objective:str = 'pred_v'
+    embedding_scale:float = 1.
+    embedding_train_prob_self_cond:float = 0.5
+    embedding_tx_dim:int = 768
+    embedding_tx_depth:int = 12
+    embedding_attn_head_dim:int = 64
+    embedding_latent_dim:int = 768    # must be equal to lm dim(=d_model=embedding_dim)
+    embedding_lm_dim:int = 768        # must be equal to lm dim(=d_model)
+    embedding_dropout:float = 0.1
+    embedding_class_conditional:bool = False
+    embedding_num_classes:int = 0     # depends on class_conditional and dataset_name
+    embedding_class_unconditional_prob:float = 0.1
+    embedding_num_samples:int = 1000
+    embedding_self_condition:bool = True
+    embedding_scale_shift:bool = True
+    embedding_num_dense_connections:int = 3
     #############################
     # hidden_dim:int
     # embedding_dim:int
