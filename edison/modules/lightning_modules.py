@@ -22,7 +22,7 @@ TODO
         result: AE with 3 options
     3. build Diffusions -> LD4LG와 비슷한 것, embedding을 위한 것 각각  ##TODO 구현 완료, 테스트 필요
         result: context diffusion, embedding diffusion
-    4. processing Diffusions together -> 여러 개의 옵션 중 하나 선택 가능하도록 ##TODO 일부 구현 완료, 테스트 필요
+    4. processing Diffusions together -> 여러 개의 옵션 중 하나 선택 가능하도록 ##TODO 일부(same) 구현 완료, 테스트 필요
         result: diffusion training logic
             same: context, embedding 동시에 처리 (이전 context, embedding latent 사용, seq2seq_cond로 사용)
             context_first: context 먼저 처리, embedding은 context latent 사용
