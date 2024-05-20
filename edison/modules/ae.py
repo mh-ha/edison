@@ -13,18 +13,15 @@ from .positional_embedding import AbsolutePositionalEmbedding
 from .lm import get_BART
 
 
-#TODO: 작동 확인
 class Autoencoder(L.LightningModule):
     def __init__(self, config:Config):
         super().__init__()
         self.save_hyperparameters()
         self.config = config
-        #TODO: LM 정의 (BART로)
         self.lm, self.tokenizer = get_BART(config.lm_model_path)
         self.lm.freeze()
         self.lm_encoder = self.lm.get_encoder()
         self.lm_decoder = self.lm.get_decoder()
-        #TODO: AE 정의(config parameter 정의 필요)
         self.ae = PerceiverAutoEncoder(
             dim_lm=config.d_model,
             num_encoder_latents=config.num_encoder_latents,

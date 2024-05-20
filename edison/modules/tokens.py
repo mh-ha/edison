@@ -35,7 +35,6 @@ class TokenConverter:
     def tokens_to_batch(self, input_ids, attention_mask, labels):
         return {'input_ids':input_ids, 'attention_mask':attention_mask, 'labels':labels}
     
-    #TODO: 동작 확인 필요
     def tokens_to_xtokens(self, input_ids, attention_mask):
         """
         input_ids: [batch, seq_len]
@@ -73,5 +72,4 @@ class TokenConverter:
         return result_buffer, result_conscious, result_position
     
     def choice_buffer_tokens(self, buffer_candidates):
-        #TODO: buffer_candidates 중에서 선택하는 방법을 정의
         return np.random.choice(buffer_candidates, size=self.num_buffer_tokens)

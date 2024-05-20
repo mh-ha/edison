@@ -18,7 +18,6 @@ from .positional_embedding import AbsolutePositionalEmbedding
 from .diffusion_layer import Encoder
 
 
-#TODO: Diffusion code 다듬기
 class SinusoidalPosEmb(nn.Module):
     def __init__(self, dim):
         super().__init__()

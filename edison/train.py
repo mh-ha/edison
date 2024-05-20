@@ -100,7 +100,8 @@ class TrainFunction:
             self.dataset['train'],
             lm._get_decoder_start_token_id(),
             tokenizer,
-            self.config.max_seq_len,)
+            self.config.max_seq_len,
+            mode='diffusion',)
         
         # 6. train
         self.trainer.fit(diffusion, train_dataloaders=self.dataloader)
@@ -173,11 +174,9 @@ class TrainFunction:
         model = EdisonAE(self.config, lm, ae)
         
         # 3-4. init lightning module using LM, AE, Diffusion
-        #TODO
         diffusion = EdisonDiffusion(self.config, model)
         
         # 5. init data loader
-        #TODO: position, conscious flags 정의
         self.dataloader = get_xtdataloader(
             self.config,
             self.dataset['train'],
@@ -185,7 +184,7 @@ class TrainFunction:
             tokenizer,
             self.config.max_seq_len,
             self.config.min_buffer_size,
-            mode='ae',)
+            mode='diffusion',)
         
         # 6. train
         self.trainer.fit(diffusion, train_dataloaders=self.dataloader)
