@@ -224,7 +224,7 @@ class EdisonAE(L.LightningModule):
     def configure_optimizers(self):
         return torch.optim.AdamW(self.ae.parameters(), lr=self.config.learning_rate)
 
-#TODO
+
 class EdisonDiffusion(L.LightningModule):
     def __init__(
         self,
