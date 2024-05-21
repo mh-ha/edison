@@ -253,7 +253,7 @@ class EdisonDiffusion(L.LightningModule):
         Get consciousness of each word in sentence
         buffer words have 0.0 value
         """
-        return attention_masks
+        return attention_masks.clone().float()
     
     def forward(self, embedding_latents, context_latents, attention_masks, class_id=None):
         positions = self.get_position(attention_masks)
