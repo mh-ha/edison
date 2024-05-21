@@ -27,7 +27,7 @@ TODO
             same: context, embedding 동시에 처리 (이전 context, embedding latent 사용, seq2seq_cond로 사용)
             context_first: context 먼저 처리, embedding은 context latent 사용
             alternately: context, embedding 번갈아가면서 처리
-    5. p, c 구현, 처리 로직
+    5. p, c 처리 로직
         result: word, p, c, processing logic
 """
 
