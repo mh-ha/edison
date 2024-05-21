@@ -14,7 +14,7 @@ class Config:
     max_seq_len:int = 64
     learning_rate:float = 1e-4  #1e-4 for AE, 2e-4 for diffusion
     #############################
-    # Perceiver AutoEncoder
+    # LD4LG AE
     d_model:int = 768
     dim_ae:int = 64
     num_layers:int = 3
@@ -22,8 +22,6 @@ class Config:
     num_decoder_latents:int = 32
     transformer_decoder:bool = True
     l2_normalize_latents:bool = True
-    #############################
-    # LD4LG AE
     #############################
     # LD4LG Diffusion
     pretrained_ae_path:str = ''
