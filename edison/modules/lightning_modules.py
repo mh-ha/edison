@@ -240,50 +240,64 @@ class EdisonDiffusion(L.LightningModule):
         self.context_diffusion_model = GaussianDiffusion(config=config, diffusion_type='context')
         self.embedding_diffusion_model = GaussianDiffusion(config=config, diffusion_type='embedding')
         
-    def forward(self, embedding_outputs, encoder_outputs, class_id=None):
+    def get_position(self, attention_masks):
+        """
+        Get position of each word in sentence
+        buffer words have max value position (i.e. 1.0)
+        """
+        positions = torch.cumsum(attention_masks, dim=1)
+        return positions / positions.max()
+    
+    def get_consciousness(self, attention_masks):
+        """
+        Get consciousness of each word in sentence
+        buffer words have 0.0 value
+        """
+        return attention_masks
+    
+    def forward(self, embedding_latents, context_latents, attention_masks, class_id=None):
+        positions = self.get_position(attention_masks)
+        consciousness = self.get_consciousness(attention_masks)
+        
         attention_mask = torch.ones(
-            encoder_outputs.shape[0],
+            context_latents.shape[0],
             self.config.num_encoder_latents,
             dtype=torch.bool,
-            device=encoder_outputs.device,)
+            device=context_latents.device,)
         
-        #TODO: p, c 구현, 처리 필요
+        #TODO: p, c 처리 방식 구현 필요
         if self.diffusion_mode == 'same':
             context_latents = self.context_diffusion_model(
-                txt_latent=encoder_outputs,
+                txt_latent=context_latents,
                 mask=attention_mask,
                 class_id=class_id,
-                seq2seq_cond=embedding_outputs,
+                seq2seq_cond=embedding_latents,
                 seq2seq_cond_mask=attention_mask,
                 )
             embedding_latents = self.embedding_diffusion_model(
-                txt_latent=embedding_outputs,
+                txt_latent=embedding_latents,
                 mask=attention_mask,
                 class_id=class_id,
-                seq2seq_cond=encoder_outputs,
+                seq2seq_cond=context_latents,
                 seq2seq_cond_mask=attention_mask,
                 )
             return context_latents, embedding_latents
         
-        #TODO(P1): context와 embedding을 처리하는 로직 필요 - 'same', 'context_first', 'alternately'
-        # elif self.diffusion_mode == 'context_first':
-            
-        # elif self.diffusion_mode == 'alternately':
+        #TODO(P1): context와 embedding을 처리하는 로직 필요 - 'context_first', 'alternately'
+        elif self.diffusion_mode == 'context_first':
+            NotImplementedError("context_first not implemented")
+        elif self.diffusion_mode == 'alternately':
+            NotImplementedError("alternately not implemented")
             
         else:
             raise ValueError(f"diffusion_mode: {self.diffusion_mode} not supported")
-        # return self.diffusion_model(
-        #     txt_latent=encoder_outputs,
-        #     mask=attention_mask,
-        #     class_id=class_id
-        #     )
         
     def training_step(self, batch, batch_idx):
         inputs = batch['input_ids']
         attention_masks = batch['attention_mask']
         class_id = batch['label'] if 'label' in batch else None
-        encoder_outputs, embedding_outputs = self.autoencoder.encode(inputs, attention_masks, return_embeddings=True)
-        loss = self.forward(embedding_outputs, encoder_outputs, class_id)
+        context_latents, embedding_latents = self.autoencoder.encode(inputs, attention_masks, return_embeddings=True)
+        loss = self.forward(embedding_latents, context_latents, attention_masks, class_id)
         self.log('loss', loss, on_step=True, prog_bar=True)
         return loss
 
