@@ -29,8 +29,8 @@ TODO
             alternately: context, embedding 번갈아가면서 처리
             
     5. p, c 처리 로직
-        1) XT-attention (like disentangle transformer) 구현
-        2) PE: RPE, CPE 구현
+        1) XT-attention (like disentangle transformer) 구현     ##TODO 구현 완료, 테스트 필요
+        2) PE: RPE, CPE 구현    
         https://www.notion.so/Edison-c16538b822a14728bb8dddba142a83de?pvs=4#e389c1f15c6e4212b4884f92b93b1463
         result: word, p, c, processing logic
 """

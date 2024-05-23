@@ -35,3 +35,7 @@ class AbsolutePositionalEmbedding(nn.Module):
 #TODO: 구현 필요
 class RelativePositionalEmbedding(nn.Module):
     pass
+
+#TODO: 구현 필요
+class ContinuousPositionalEmbedding(nn.Module):
+    pass
