@@ -15,7 +15,7 @@ class Config:
     learning_rate:float = 1e-4  #1e-4 for AE, 2e-4 for diffusion
     #############################
     # LD4LG AE
-    d_model:int = 768
+    dim_lm:int = 768
     dim_ae:int = 64
     num_layers:int = 3
     num_encoder_latents:int = 32
@@ -50,7 +50,7 @@ class Config:
     diffusion_mode:str = 'same' # 'same', 'context_first', 'alternately'
     #############################
     # Edison AE
-    d_model:int = 768
+    dim_lm:int = 768
     dim_ae:int = 64
     num_layers:int = 3
     num_encoder_latents:int = 32

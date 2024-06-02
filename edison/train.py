@@ -12,7 +12,7 @@ os.environ['CURL_CA_BUNDLE'] = ''
 os.environ["TOKENIZERS_PARALLELISM"] = "false"
 
 from .modules.lm import get_BART
-from .modules.ae import PerceiverAutoEncoder, PerceiverAutoEncoderForEdison
+from .modules.ae import PerceiverAutoEncoder, EdisonPerceiverAutoEncoder
 from .modules.lightning_modules import LD4LGAE, LD4LGDiffusion, EdisonAE, EdisonDiffusion
 from .modules.lightning_data_module import get_dataset, get_dataloader, get_xtdataloader
 from .modules.tokens import TokenConverter
@@ -43,9 +43,9 @@ class TrainFunction:
         
         # 2. init AE
         ae = PerceiverAutoEncoder(
-            dim_lm=self.config.d_model,
+            dim_lm=self.config.dim_lm,
             dim_ae=self.config.dim_ae,
-            depth=self.config.num_layers,
+            num_layers=self.config.num_layers,
             num_encoder_latents=self.config.num_encoder_latents,
             num_decoder_latents=self.config.num_decoder_latents,
             transformer_decoder=self.config.transformer_decoder,
@@ -82,9 +82,9 @@ class TrainFunction:
         # 1-2. init LM and AE
         lm, tokenizer = get_BART()
         ae = PerceiverAutoEncoder(
-            dim_lm=self.config.d_model,
+            dim_lm=self.config.dim_lm,
             dim_ae=self.config.dim_ae,
-            depth=self.config.num_layers,
+            num_layers=self.config.num_layers,
             num_encoder_latents=self.config.num_encoder_latents,
             num_decoder_latents=self.config.num_decoder_latents,
             transformer_decoder=self.config.transformer_decoder,
@@ -119,10 +119,10 @@ class TrainFunction:
         lm, tokenizer = get_BART()
         
         # 2. init AE
-        ae = PerceiverAutoEncoderForEdison(
-            dim_lm=self.config.d_model,
+        ae = EdisonPerceiverAutoEncoder(
+            dim_lm=self.config.dim_lm,
             dim_ae=self.config.dim_ae,
-            depth=self.config.num_layers,
+            num_layers=self.config.num_layers,
             num_encoder_latents=self.config.num_encoder_latents,
             num_decoder_latents=self.config.num_decoder_latents,
             transformer_decoder=self.config.transformer_decoder,
@@ -161,10 +161,10 @@ class TrainFunction:
         # ae = EdisonAE.load_from_checkpoint(self.config.pretrained_ae_path)
         # 1-2. init LM and AE
         lm, tokenizer = get_BART()
-        ae = PerceiverAutoEncoderForEdison(
-            dim_lm=self.config.d_model,
+        ae = EdisonPerceiverAutoEncoder(
+            dim_lm=self.config.dim_lm,
             dim_ae=self.config.dim_ae,
-            depth=self.config.num_layers,
+            num_layers=self.config.num_layers,
             num_encoder_latents=self.config.num_encoder_latents,
             num_decoder_latents=self.config.num_decoder_latents,
             transformer_decoder=self.config.transformer_decoder,

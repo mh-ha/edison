@@ -539,3 +539,5 @@ class GaussianDiffusion(nn.Module):
             return loss.mean(), predictions.pred_x_start
         return loss.mean()
 
+
+

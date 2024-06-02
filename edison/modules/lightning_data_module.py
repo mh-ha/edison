@@ -45,7 +45,16 @@ def get_dataset(dataset_name, data_path=None):
     return dataset
 
 
-def get_dataloader(config:Config, dataset, decoder_start_token_id, tokenizer, max_seq_len, mode='diffusion', shuffle=True, context_tokenizer=None):
+def get_dataloader(
+    config:Config,
+    dataset,
+    decoder_start_token_id,
+    tokenizer,
+    max_seq_len,
+    mode='diffusion',
+    shuffle=True,
+    context_tokenizer=None,
+    ):
     def tokenization(example):
         if mode == 'diffusion' and config.dataset_name in {'xsum', 'qqp'}:
             assert context_tokenizer is not None
@@ -87,7 +96,17 @@ def get_dataloader(config:Config, dataset, decoder_start_token_id, tokenizer, ma
         )
     return dl
 
-def get_xtdataloader(config:Config, dataset, decoder_start_token_id, tokenizer, max_seq_len, min_buffer_size, mode='diffusion', shuffle=True, context_tokenizer=None):
+def get_xtdataloader(
+    config:Config,
+    dataset,
+    decoder_start_token_id,
+    tokenizer,
+    max_seq_len,
+    min_buffer_size,
+    mode='diffusion',
+    shuffle=True,
+    context_tokenizer=None,
+    ):
     def tokenization(example):
         if mode == 'diffusion' and config.dataset_name in {'xsum', 'qqp'}:
             assert context_tokenizer is not None
@@ -119,7 +138,7 @@ def get_xtdataloader(config:Config, dataset, decoder_start_token_id, tokenizer, 
             truncation=True,
             max_length=max_seq_len+min_buffer_size)
 
-    collate_fn=DataCollatorForBartDenoisingLM(tokenizer, decoder_start_token_id, config)
+    collate_fn=XTDataCollatorForBartDenoisingLM(tokenizer, decoder_start_token_id, config)
     
     if config.dataset_name in {'xsum', 'qqp'}:
         dataset = dataset.map(tokenization, remove_columns=['text', 'context'], batched=True, num_proc=None)
@@ -183,6 +202,7 @@ def parse_metadata(metadata):
         return 'Positive' if metadata > 0.5 else 'Negative'
 
 
+
 @dataclass
 class DataCollatorForBartDenoisingLM:
     """
@@ -195,8 +215,37 @@ class DataCollatorForBartDenoisingLM:
 
     tokenizer: PreTrainedTokenizerBase
     decoder_start_token_id: int
+
+    def __call__(self, examples: List[Dict[str, List[int]]]) -> BatchEncoding:
+        batch = BatchEncoding(
+            {k: torch.LongTensor([examples[i][k] for i in range(len(examples))]) for k, v in examples[0].items()}
+        )
+
+        batch["labels"] = batch["input_ids"].clone()
+        batch["decoder_input_ids"] = shift_tokens_right(
+            batch["labels"], self.tokenizer.pad_token_id, self.decoder_start_token_id
+        )
+
+        batch['labels'][batch['labels'] == self.tokenizer.pad_token_id] = -100
+
+        batch["attention_mask"] = (batch["input_ids"] != self.tokenizer.pad_token_id).long()
+        batch["decoder_attention_mask"] = (batch["decoder_input_ids"] != self.tokenizer.pad_token_id).long()
+
+        return batch
+
+@dataclass
+class XTDataCollatorForBartDenoisingLM:
+    """
+    Data collator used for BART denoising language modeling.
+
+    Args:
+        tokenizer (:class:`~transformers.PreTrainedTokenizer` or :class:`~transformers.PreTrainedTokenizerFast`):
+            The tokenizer used for encoding the data
+    """
+
+    tokenizer: PreTrainedTokenizerBase
+    decoder_start_token_id: int
     config: Config = None
-    # vocab = tokenizer.get_vocab()
     vocab_size = len(tokenizer)
 
     def __call__(self, examples: List[Dict[str, List[int]]]) -> BatchEncoding:

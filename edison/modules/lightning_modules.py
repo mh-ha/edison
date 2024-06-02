@@ -41,6 +41,7 @@ import torch
 
 from ..config.config import Config
 from .diffusion import GaussianDiffusion
+from .edison_diffusion import EdisonGaussianDiffusion
 
 
 class LD4LGAE(L.LightningModule):
@@ -241,8 +242,8 @@ class EdisonDiffusion(L.LightningModule):
         self.diffusion_mode = config.diffusion_mode
         self.autoencoder = autoencoder
         self.autoencoder.freeze()
-        self.context_diffusion_model = GaussianDiffusion(config=config, diffusion_type='context')
-        self.embedding_diffusion_model = GaussianDiffusion(config=config, diffusion_type='embedding')
+        self.context_diffusion_model = EdisonGaussianDiffusion(config=config, diffusion_type='context')
+        self.embedding_diffusion_model = EdisonGaussianDiffusion(config=config, diffusion_type='embedding')
         
     def get_position(self, attention_masks):
         """

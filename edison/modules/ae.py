@@ -11,6 +11,7 @@ from ..config.config import Config
 from ..layers.optimizer import AdamW
 from .positional_embedding import AbsolutePositionalEmbedding
 from .lm import get_BART
+from .utils import exists, divisible_by
 
 
 class Autoencoder(L.LightningModule):
@@ -23,11 +24,11 @@ class Autoencoder(L.LightningModule):
         self.lm_encoder = self.lm.get_encoder()
         self.lm_decoder = self.lm.get_decoder()
         self.ae = PerceiverAutoEncoder(
-            dim_lm=config.d_model,
+            dim_lm=config.dim_lm,
             num_encoder_latents=config.num_encoder_latents,
             num_decoder_latents=config.num_decoder_latents,
             dim_ae=config.dim_ae,
-            depth=config.num_layers,
+            num_layers=config.num_layers,
             transformer_decoder=True,
             l2_normalize_latents=config.l2_normalize_latents)
         self.loss = None
@@ -68,14 +69,6 @@ class Autoencoder(L.LightningModule):
         
 
 
-
-def exists(x):
-    return x is not None
-
-def divisible_by(numer, denom):
-    return (numer % denom) == 0
-
-
 class LayerNorm(nn.Module):
     def __init__(self, dim):
         super().__init__()
@@ -112,220 +105,257 @@ def FeedForward(dim, mult=4, dropout=0.):
 class Attention(nn.Module):
     def __init__(
         self,
-        dim,
+        dim_input,
         dim_head = 64,
         qk_norm=True,
     ):
         super().__init__()
-        hidden_dim = dim
-        heads = dim // dim_head
-        assert divisible_by(dim, heads), 'dimension must be divisible by number of heads'
-
+        num_heads = dim_input // dim_head
+        assert divisible_by(dim_input, num_heads), 'dimension must be divisible by number of heads'
 
         self.scale = dim_head ** -0.5
-        self.heads = heads
-
-        self.norm = nn.LayerNorm(dim) 
-
+        self.num_heads = num_heads
+        self.norm = nn.LayerNorm(dim_input) 
         self.query_norm = RMSNorm(dim_head) if qk_norm else nn.Identity()
         self.key_norm = RMSNorm(dim_head) if qk_norm else nn.Identity()
-
-        self.to_q = nn.Linear(dim, hidden_dim, bias = False)
-        self.to_k = nn.Linear(dim, hidden_dim, bias = False)
-        self.to_v = nn.Linear(dim, hidden_dim, bias = False)
-        self.to_out = nn.Linear(hidden_dim, dim)
+        self.to_q = nn.Linear(dim_input, dim_input, bias = False)
+        self.to_k = nn.Linear(dim_input, dim_input, bias = False)
+        self.to_v = nn.Linear(dim_input, dim_input, bias = False)
+        self.to_out = nn.Linear(dim_input, dim_input)
 
     def forward(
         self,
         x,
     ):
-        h = self.heads
-
+        h = self.num_heads
         x = self.norm(x)
-
-
         qkv = (self.to_q(x), self.to_k(x), self.to_v(x))
         q, k, v = map(lambda t: rearrange(t, 'b n (h d) -> b h n d', h = h), qkv)
-
         sim = einsum('b h i d, b h j d -> b h i j', self.query_norm(q)* self.scale, self.key_norm(k))
-
         attn = sim.softmax(dim = -1)
-
         out = einsum('b h i j, b h j d -> b h i d', attn, v)
         out = rearrange(out, 'b h n d -> b n (h d)')
         return self.to_out(out)
 
 
 # attention pooling
-
 class PerceiverAttention(nn.Module):
     def __init__(
         self,
         *,
-        dim,
+        dim_input,
         dim_latent,
         dim_head=64,
         qk_norm=True,
     ):
         super().__init__()
         self.scale = dim_head ** -0.5
-
-        inner_dim = max(dim_latent, dim)
-        self.heads = inner_dim // dim_head
-
-        self.norm = nn.LayerNorm(dim)
+        self.inner_dim = max(dim_latent, dim_input)
+        self.num_heads = self.inner_dim // dim_head
+        self.norm = nn.LayerNorm(dim_input)
         self.norm_latents = nn.LayerNorm(dim_latent)
-
         self.query_norm = RMSNorm(dim_head) if qk_norm else nn.Identity()
         self.key_norm = RMSNorm(dim_head) if qk_norm else nn.Identity()
-
-        self.to_q = nn.Linear(dim_latent, inner_dim, bias=False)
-        if dim_latent != dim:
-            self.latent_to_kv = nn.Linear(dim_latent, inner_dim * 2, bias=False)
-        else:
-            self.latent_to_kv = None
-        self.to_kv = nn.Linear(dim, inner_dim * 2, bias=False)
-
-        self.to_out = nn.Sequential(
-            nn.Linear(inner_dim, dim_latent),
-        )
+        self.to_q = nn.Linear(dim_latent, self.inner_dim, bias=False)
+        self.latent_to_kv = nn.Linear(dim_latent, self.inner_dim * 2, bias=False) if dim_latent != dim_input else None
+        self.to_kv = nn.Linear(dim_input, self.inner_dim * 2, bias=False)
+        self.to_out = nn.Linear(self.inner_dim, dim_latent),
 
     def forward(self, x, latents, mask=None):
-        # x, latent normalization
-        x = self.norm(x)  # 1: (batch, max_seq_len, dim) -> (batch, max_seq_len, dim)
-        latents = self.norm_latents(latents)  # 2 : (batch, num_latents, dim_latent) -> (batch, num_latents, dim_latent)
-
-        b, h = x.shape[0], self.heads
-
-        # latents: latent_dim -> inner_dim
-        q = self.to_q(latents)  # 3: (batch, num_latents, dim_latent) -> (batch, num_latents, inner_dim(=max(dim, dim_latent)))
-        # the paper differs from Perceiver in which they also concat the key / values derived from the latents to be attended to
+        # init
+        x = self.norm(x)
+        latents = self.norm_latents(latents)
+        h = self.num_heads
+        
+        # get q, k, v
+        q = self.to_q(latents)
         if exists(self.latent_to_kv):
-            # concat kv(max_seq_len), latents(num_latents) along the sequence dimension (dim=1)
-            kv_input = torch.cat([self.to_kv(x), self.latent_to_kv(latents)], dim=1)  # 4, 5: concat kv(max_seq_len), latents(num_latents) along the sequence dimension
+            kv_input = torch.cat([self.to_kv(x), self.latent_to_kv(latents)], dim=1)
         else:
             kv_input = torch.cat([self.to_kv(x), self.to_kv(latents)], dim=1)
-        # split kv_input into k, v (batch, max_seq_len + num_latents, inner_dim)
-        k, v = rearrange(kv_input, 'b n (split d) -> split b n d', split=2)  # (batch, max_seq_len + num_latents, inner_dim*2) -> (2, batch, max_seq_len + num_latents, inner_dim)
-
-        # split q, k, v into heads(=inner_dim/dim_head)
-        q, k, v = map(lambda t: rearrange(
-            t, 'b n (h d) -> b h n d', h=h), (q, k, v))  # (batch, (num_latents) or (max_seq_len + num_latents), inner_dim) -> (batch, heads, (num_latents) or (max_seq_len + num_latents), dim_head)
-
-        # similarities and masking
-        # sim=(q@k)/sqrt(dim_head) (batch, heads, num_latents, max_seq_len + num_latents)
-        sim = einsum('... i d, ... j d  -> ... i j',
-                     self.query_norm(q) * self.scale, self.key_norm(k))  # 6, 7: (batch, heads, num_latents, dim_head) @ (batch, heads, max_seq_len + num_latents, dim_head) -> (batch, heads, num_latents, max_seq_len + num_latents)
-
+        k, v = rearrange(kv_input, 'b n (split d) -> split b n d', split=2)
+        q, k, v = map(lambda t: rearrange(t, 'b n (h d) -> b h n d', h=h), (q, k, v))
+        
+        # attention
+        attn = einsum('b h i d, b h j d  -> b h i j', self.query_norm(q) * self.scale, self.key_norm(k))
         if exists(mask):
-            max_neg_value = -torch.finfo(sim.dtype).max
+            max_neg_value = -torch.finfo(attn.dtype).max
             mask = F.pad(mask, (0, latents.shape[-2]), value=True)
             mask = rearrange(mask, 'b j -> b 1 1 j')
-            sim = sim.masked_fill(~mask, max_neg_value)
+            attn = attn.masked_fill(~mask, max_neg_value)
+        attn = attn.softmax(dim=-1, dtype=attn.dtype)
+        out = einsum('b h i j, b h j d -> b h i d', attn, v)
+        out = rearrange(out, 'b h n d -> b n (h d)', h=h)
+        return self.to_out(out)
 
-        # softmax and multiply with values
-        attn = sim.softmax(dim=-1, dtype=torch.float32)
-        attn = attn.to(sim.dtype)
-        # out = attn@v (batch, heads, num_latents, dim_head)
-        out = einsum('... i j, ... j d -> ... i d', attn, v)  # (batch, heads, num_latents, max_seq_len + num_latents) * (batch, heads, max_seq_len + num_latents, dim_head) -> (batch, heads, num_latents, dim_head)
-        # merge heads
-        out = rearrange(out, 'b h n d -> b n (h d)', h=h)  # (batch, heads, num_latents, dim_head) -> (batch, num_latents, inner_dim)
-        # linear projection (batch, num_latents, dim_latent)
-        return self.to_out(out)  # 8: (batch, num_latents, inner_dim) -> (batch, num_latents, dim_latent)
+
+# edison attention
+class EdisonPerceiverAttention(nn.Module):
+    def __init__(
+        self,
+        *,
+        dim_input,#d_model
+        dim_latent,#dim_ae
+        dim_head=64,
+        qk_norm=True,
+    ):
+        super().__init__()
+        self.scale = dim_head ** -0.5
+        self.inner_dim = max(dim_latent, dim_input)
+        self.num_heads = self.inner_dim // dim_head
+        self.norm = nn.LayerNorm(dim_input)
+        self.norm_latents = nn.LayerNorm(dim_latent)
+        self.query_norm = RMSNorm(dim_head) if qk_norm else nn.Identity()
+        self.key_norm = RMSNorm(dim_head) if qk_norm else nn.Identity()
+        self.to_q = nn.Linear(dim_latent, self.inner_dim, bias=False)
+        self.latent_to_kv = nn.Linear(dim_latent, self.inner_dim * 2, bias=False) if dim_latent != dim_input else None
+        self.to_kv = nn.Linear(dim_input, self.inner_dim * 2, bias=False)
+        self.to_out = nn.Linear(self.inner_dim, dim_latent),
+
+    def forward(self, x, latents, consciousness_mask):
+        # init
+        x = self.norm(x)
+        latents = self.norm_latents(latents)
+        h = self.num_heads
+        
+        # get q, k, v
+        q = self.to_q(latents)
+        #TODO: 필요한가? (원래 perceiver에서는 없었고, edison에서는 이것 때문에 consciousness mask가 맞지 않게 됨)
+        if exists(self.latent_to_kv):
+            kv_input = torch.cat([self.to_kv(x), self.latent_to_kv(latents)], dim=1)
+        else:
+            kv_input = torch.cat([self.to_kv(x), self.to_kv(latents)], dim=1)
+        k, v = rearrange(kv_input, 'b n (split d) -> split b n d', split=2)
+        q, k, v = map(lambda t: rearrange(t, 'b n (h d) -> b h n d', h=h), (q, k, v))
+        
+        # attention
+        attn = einsum('b h i d, b h j d  -> b h i j', self.query_norm(q) * self.scale, self.key_norm(k))
+        #COMMENT: attention mechanism에서 softmax 후의 score에 대해서 위와 같은 matrix를 곱하고 softmax를 가하는 dim에 대해서 renormalize (sum으로 나눠줌)하면 됩니다.
+        #TODO: perceiver attention은 latents를 query로 쓰기 때문에, latents length가 고정되어 있음. 이것 때문에 consciousness mask가 제대로 작동하지 않음.
+        # 즉, 처음 input으로 들어오는 latents의 length가 consciousness mask의 length와 같아야 함.
+        # 이러려면 처음 max_seq_len가 diffusion까지 계속 똑같이 유지되어야 함.
+        # 아니면 c=1, c=0을 따로 처리해야 함.
+        if exists(consciousness_mask):
+            max_neg_value = -torch.finfo(attn.dtype).max
+            consciousness_mask = F.pad(consciousness_mask, (0, latents.shape[-2]), value=True)
+            consciousness_mask = rearrange(consciousness_mask, 'b j -> b 1 1 j')
+            attn = attn.masked_fill(~consciousness_mask, max_neg_value)
+        attn = attn.softmax(dim=-1, dtype=attn.dtype)
+        attn = attn.softmax(dim=-1, dtype=attn.dtype)
+        out = einsum('b h i j, b h j d -> b h i d', attn, v)
+        out = rearrange(out, 'b h n d -> b n (h d)', h=h)
+        return self.to_out(out)
 
 
 class PerceiverResampler(nn.Module):
     def __init__(
         self,
         *,
-        dim,
+        dim_input,
         dim_latent,
-        depth,
+        num_layers,
         dim_head=64,
         num_latents=16,
         max_seq_len=64,
         ff_mult=4,
-        legacy=False,
         l2_normalize_latents=False,
     ):
         super().__init__()
-        self.pos_emb = AbsolutePositionalEmbedding(dim, max_seq_len)
-
-        if legacy:
-            dim_out = dim_latent
-            dim_latent = dim
-
+        self.pos_emb = AbsolutePositionalEmbedding(dim_input, max_seq_len)
         self.latents = nn.Parameter(torch.randn(num_latents, dim_latent))
         nn.init.normal_(self.latents, std = 0.02)
-
         self.layers = nn.ModuleList([])
-        for _ in range(depth):
+        for _ in range(num_layers):
             self.layers.append(nn.ModuleList([
-                PerceiverAttention(
-                    dim=dim, dim_latent=dim_latent, dim_head=dim_head),
-                FeedForward(dim=dim_latent, mult=ff_mult)
+                PerceiverAttention(dim_input, dim_latent, dim_head),
+                FeedForward(dim_latent, ff_mult)
             ]))
-
-        self.l2_normalize_latents = l2_normalize_latents
-
+        self.l2_normalize_latents = lambda x: F.normalize(x, dim=-1) * math.sqrt(x.shape[-1]) if l2_normalize_latents else lambda x: x
         self.final_norm = nn.LayerNorm(dim_latent)
-        self.output_proj = nn.Linear(dim_latent, dim_out) if legacy else nn.Identity()
 
     def forward(self, x, mask=None):
         pos_emb = self.pos_emb(x)
-
-        x_with_pos = x + pos_emb
-
+        x = x + pos_emb
         latents = repeat(self.latents, 'n d -> b n d', b=x.shape[0])
 
-        for attn, ff in self.layers:
-            latents = attn(x_with_pos, latents, mask=mask) + latents
-            latents = ff(latents) + latents
-        latents = self.output_proj(self.final_norm(latents))
-        # Normalize latents to norm sqrt(d_latent)
-        if self.l2_normalize_latents:
-            latents = F.normalize(latents, dim=-1) * math.sqrt(latents.shape[-1])
+        for attn_layer, ff_layer in self.layers:
+            latents = attn_layer(x, latents, mask=mask) + latents
+            latents = ff_layer(latents) + latents
+        latents = self.final_norm(latents)
+        latents = self.l2_normalize_latents(latents)
         return latents
-        
+
+class EdisonPerceiverResampler(nn.Module):
+    def __init__(
+        self,
+        *,
+        dim_input,
+        dim_latent,
+        num_layers,
+        dim_head=64,
+        num_latents=16,
+        max_seq_len=64,
+        ff_mult=4,
+        l2_normalize_latents=False,
+    ):
+        super().__init__()
+        self.pos_emb = AbsolutePositionalEmbedding(dim_input, max_seq_len)
+        self.latents = nn.Parameter(torch.randn(num_latents, dim_latent))
+        nn.init.normal_(self.latents, std = 0.02)
+        self.layers = nn.ModuleList([])
+        for _ in range(num_layers):
+            self.layers.append(nn.ModuleList([
+                EdisonPerceiverAttention(dim_input, dim_latent, dim_head),
+                FeedForward(dim_latent, ff_mult)
+            ]))
+        self.l2_normalize_latents = lambda x: F.normalize(x, dim=-1) * math.sqrt(x.shape[-1]) if l2_normalize_latents else lambda x: x
+        self.final_norm = nn.LayerNorm(dim_latent)
+
+    def forward(self, x, consciousness_mask):
+        pos_emb = self.pos_emb(x)
+        x = x + pos_emb
+        latents = repeat(self.latents, 'n d -> b n d', b=x.shape[0])
+
+        for attn_layer, ff_layer in self.layers:
+            latents = attn_layer(x, latents, consciousness_mask) + latents
+            latents = ff_layer(latents) + latents
+        latents = self.final_norm(latents)
+        latents = self.l2_normalize_latents(latents)
+        return latents
+
 class Transformer(nn.Module):
     def __init__(
         self,
         *,
         dim_input,
         dim_tx,
-        depth,
+        num_layers,
         dim_head=64,
         max_seq_len=64,
         ff_mult=4,
     ):
         super().__init__()
         self.pos_emb = AbsolutePositionalEmbedding(dim_tx, max_seq_len)
-
         self.input_proj = nn.Linear(dim_input, dim_tx)
-
         self.layers = nn.ModuleList([])
-        for _ in range(depth):
+        for _ in range(num_layers):
             self.layers.append(nn.ModuleList([
                 Attention(
-                    dim=dim_tx, dim_head=dim_head),
+                    dim_input=dim_tx, dim_head=dim_head),
                 FeedForward(dim=dim_tx, mult=ff_mult)
             ]))
-
         self.final_norm = nn.LayerNorm(dim_tx)
-        self.output_proj = nn.Identity()
 
     def forward(self, x, mask=None):
-        
         assert not exists(mask)
         x = self.input_proj(x)
         pos_emb = self.pos_emb(x)
         x = x + pos_emb
-
-        for attn, ff in self.layers:
-            x = attn(x) + x
-            x = ff(x) + x
-
-        return self.output_proj(self.final_norm(x))
+        
+        for attn_layer, ff_layer in self.layers:
+            x = attn_layer(x) + x
+            x = ff_layer(x) + x
+        return self.final_norm(x)
 
 
 class PerceiverAutoEncoder(nn.Module):
@@ -334,9 +364,9 @@ class PerceiverAutoEncoder(nn.Module):
         *,
         dim_lm,
         dim_ae,
-        depth,
+        num_layers,
         dim_head=64,
-        num_encoder_latents=8,
+        num_encoder_latents=32,
         num_decoder_latents=32,
         max_seq_len=64,
         ff_mult=4,
@@ -348,13 +378,18 @@ class PerceiverAutoEncoder(nn.Module):
         self.encoder_only = encoder_only
         if self.encoder_only:
             assert dim_ae == dim_lm
-        self.perceiver_encoder = PerceiverResampler(dim=dim_lm, dim_latent=dim_ae, depth=depth, dim_head=dim_head,
-                                                    num_latents=num_encoder_latents, max_seq_len=max_seq_len, ff_mult=ff_mult, l2_normalize_latents=l2_normalize_latents)
+        self.perceiver_encoder = PerceiverResampler(
+            dim_input=dim_lm, dim_latent=dim_ae, num_layers=num_layers, dim_head=dim_head,
+            num_latents=num_encoder_latents, max_seq_len=max_seq_len, ff_mult=ff_mult,
+            l2_normalize_latents=l2_normalize_latents)
         if transformer_decoder:
-            self.perceiver_decoder = Transformer(dim_input=dim_ae, dim_tx=dim_lm, depth=depth, dim_head=dim_head, max_seq_len=num_encoder_latents, ff_mult=ff_mult)
+            self.perceiver_decoder = Transformer(
+                dim_input=dim_ae, dim_tx=dim_lm, num_layers=num_layers,
+                dim_head=dim_head, max_seq_len=num_encoder_latents, ff_mult=ff_mult)
         else:
-            self.perceiver_decoder = PerceiverResampler(dim=dim_ae, dim_latent=dim_lm, depth=depth, dim_head=dim_head,
-                                                        num_latents=num_decoder_latents, max_seq_len=num_encoder_latents, ff_mult=ff_mult)
+            self.perceiver_decoder = PerceiverResampler(
+                dim_input=dim_ae, dim_latent=dim_lm, num_layers=num_layers, dim_head=dim_head,
+                num_latents=num_decoder_latents, max_seq_len=num_encoder_latents, ff_mult=ff_mult)
 
     def decode(self, ae_latent):
         return self.perceiver_decoder(ae_latent)
@@ -363,25 +398,21 @@ class PerceiverAutoEncoder(nn.Module):
         return self.perceiver_encoder(encoder_outputs, mask=attention_mask.bool())
 
     def forward(self, encoder_outputs, attention_mask):
-        # print(f"input: {encoder_outputs.shape}")
         encoder_latents = self.perceiver_encoder(
             encoder_outputs, mask=attention_mask.bool())
-        # print(f"encoder_latents: {encoder_latents.shape}")
-        # return self.perceiver_decoder(encoder_latents)
         decoder_outputs = self.perceiver_decoder(encoder_latents)
-        # print(f"decoder_outputs: {decoder_outputs.shape}")
         return decoder_outputs
 
 
-class PerceiverAutoEncoderForEdison(nn.Module):
+class EdisonPerceiverAutoEncoder(nn.Module):
     def __init__(
         self,
         *,
         dim_lm,
         dim_ae,
-        depth,
+        num_layers,
         dim_head=64,
-        num_encoder_latents=8,
+        num_encoder_latents=32,
         num_decoder_latents=32,
         max_seq_len=64,
         ff_mult=4,
@@ -391,21 +422,18 @@ class PerceiverAutoEncoderForEdison(nn.Module):
     ):
         super().__init__()
         self.encoding_mode = encoding_mode
-        self.perceiver_encoder = PerceiverResampler(
-            dim=dim_lm, dim_latent=dim_ae, depth=depth, dim_head=dim_head,
-            num_latents=num_encoder_latents, max_seq_len=max_seq_len, ff_mult=ff_mult, l2_normalize_latents=l2_normalize_latents)
+        self.perceiver_encoder = EdisonPerceiverResampler(
+            dim_input=dim_lm, dim_latent=dim_ae, num_layers=num_layers, dim_head=dim_head,
+            num_latents=num_encoder_latents, max_seq_len=max_seq_len, ff_mult=ff_mult,
+            l2_normalize_latents=l2_normalize_latents)
         if self.encoding_mode == 'both_separately':
-            self.perceiver_encoder_for_buffer = PerceiverResampler(
-                dim=dim_lm, dim_latent=dim_ae, depth=depth, dim_head=dim_head,
-                num_latents=num_encoder_latents, max_seq_len=max_seq_len, ff_mult=ff_mult, l2_normalize_latents=l2_normalize_latents)
-        if transformer_decoder:
-            self.perceiver_decoder = Transformer(
-                dim_input=dim_ae, dim_tx=dim_lm, depth=depth,
-                dim_head=dim_head, max_seq_len=num_encoder_latents, ff_mult=ff_mult)
-        else:
-            self.perceiver_decoder = PerceiverResampler(
-                dim=dim_ae, dim_latent=dim_lm, depth=depth, dim_head=dim_head,
-                num_latents=num_decoder_latents, max_seq_len=num_encoder_latents, ff_mult=ff_mult)
+            self.perceiver_encoder_for_buffer = EdisonPerceiverResampler(
+                dim_input=dim_lm, dim_latent=dim_ae, num_layers=num_layers, dim_head=dim_head,
+                num_latents=num_encoder_latents, max_seq_len=max_seq_len, ff_mult=ff_mult,
+                l2_normalize_latents=l2_normalize_latents)
+        self.perceiver_decoder = Transformer(
+            dim_input=dim_ae, dim_tx=dim_lm, num_layers=num_layers,
+            dim_head=dim_head, max_seq_len=num_encoder_latents, ff_mult=ff_mult)
 
     def decode(self, ae_latent):
         return self.perceiver_decoder(ae_latent)
@@ -413,25 +441,19 @@ class PerceiverAutoEncoderForEdison(nn.Module):
     def encode(self, encoder_outputs, attention_mask):
         if self.encoding_mode == 'both_together':
             attention_mask = torch.ones_like(encoder_outputs)
-            encoder_outputs = self.perceiver_encoder(encoder_outputs, mask=attention_mask.bool())
+            encoder_outputs = self.perceiver_encoder(encoder_outputs, attention_mask.bool())
         elif self.encoding_mode == 'both_separately':
             attention_mask_for_buffer = ~attention_mask.bool()
-            encoder_outputs = self.perceiver_encoder(encoder_outputs, mask=attention_mask.bool())
-            buffer_latents = self.perceiver_encoder_for_buffer(encoder_outputs, mask=attention_mask_for_buffer)
+            encoder_outputs = self.perceiver_encoder(encoder_outputs, attention_mask.bool())
+            buffer_latents = self.perceiver_encoder_for_buffer(encoder_outputs, attention_mask_for_buffer)
             # sentence latents + buffer latents
             encoder_outputs = encoder_outputs[attention_mask.bool()] + buffer_latents[attention_mask_for_buffer]
         else:
-            encoder_outputs = self.perceiver_encoder(encoder_outputs, mask=attention_mask.bool())
+            encoder_outputs = self.perceiver_encoder(encoder_outputs, attention_mask.bool())
         return encoder_outputs
 
     def forward(self, encoder_outputs, attention_mask):
-        # print(f"input: {encoder_outputs.shape}")
         encoder_latents = self.perceiver_encoder(
             encoder_outputs, mask=attention_mask.bool())
-        # print(f"encoder_latents: {encoder_latents.shape}")
-        # return self.perceiver_decoder(encoder_latents)
         decoder_outputs = self.perceiver_decoder(encoder_latents)
-        # print(f"decoder_outputs: {decoder_outputs.shape}")
         return decoder_outputs
-        
-
