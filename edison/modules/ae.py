@@ -208,41 +208,49 @@ class EdisonPerceiverAttention(nn.Module):
         self.query_norm = RMSNorm(dim_head) if qk_norm else nn.Identity()
         self.key_norm = RMSNorm(dim_head) if qk_norm else nn.Identity()
         self.to_q = nn.Linear(dim_latent, self.inner_dim, bias=False)
-        self.latent_to_kv = nn.Linear(dim_latent, self.inner_dim * 2, bias=False) if dim_latent != dim_input else None
+        # self.latent_to_kv = nn.Linear(dim_latent, self.inner_dim * 2, bias=False) if dim_latent != dim_input else None
         self.to_kv = nn.Linear(dim_input, self.inner_dim * 2, bias=False)
+        self.latents_projection = nn.Linear(self.inner_dim * 2, self.inner_dim)
         self.to_out = nn.Linear(self.inner_dim, dim_latent),
 
-    def forward(self, x, latents, consciousness_mask):
+    def forward(self, x, latents_c1, latents_c0, consciousness_mask):
         # init
         x = self.norm(x)
-        latents = self.norm_latents(latents)
+        latents_c1 = self.norm_latents(latents_c1)
+        latents_c0 = self.norm_latents(latents_c0)
         h = self.num_heads
         
         # get q, k, v
-        q = self.to_q(latents)
+        q_c1 = self.to_q(latents_c1)
+        q_c0 = self.to_q(latents_c0)
+        kv_input = self.to_kv(x)
         #TODO: 필요한가? (원래 perceiver에서는 없었고, edison에서는 이것 때문에 consciousness mask가 맞지 않게 됨)
-        if exists(self.latent_to_kv):
-            kv_input = torch.cat([self.to_kv(x), self.latent_to_kv(latents)], dim=1)
-        else:
-            kv_input = torch.cat([self.to_kv(x), self.to_kv(latents)], dim=1)
+        # if exists(self.latent_to_kv):
+        #     kv_input = torch.cat([self.to_kv(x), self.latent_to_kv(latents_c1)], dim=1)
+        # else:
+        #     kv_input = torch.cat([self.to_kv(x), self.to_kv(latents_c1)], dim=1)
         k, v = rearrange(kv_input, 'b n (split d) -> split b n d', split=2)
-        q, k, v = map(lambda t: rearrange(t, 'b n (h d) -> b h n d', h=h), (q, k, v))
+        q_c1 = rearrange(q_c1, 'b n (h d) -> b h n d', h=h)
+        q_c0 = rearrange(q_c0, 'b n (h d) -> b h n d', h=h)
+        k = rearrange(k, 'b n (h d) -> b h n d', h=h)
+        v = rearrange(v, 'b n (h d) -> b h n d', h=h)
         
         # attention
-        attn = einsum('b h i d, b h j d  -> b h i j', self.query_norm(q) * self.scale, self.key_norm(k))
+        attn_c1 = einsum('b h i d, b h j d  -> b h i j', self.query_norm(q_c1) * self.scale, self.key_norm(k))
+        attn_c0 = einsum('b h i d, b h j d  -> b h i j', self.query_norm(q_c0) * self.scale, self.key_norm(k))
         #COMMENT: attention mechanism에서 softmax 후의 score에 대해서 위와 같은 matrix를 곱하고 softmax를 가하는 dim에 대해서 renormalize (sum으로 나눠줌)하면 됩니다.
-        #TODO: perceiver attention은 latents를 query로 쓰기 때문에, latents length가 고정되어 있음. 이것 때문에 consciousness mask가 제대로 작동하지 않음.
-        # 즉, 처음 input으로 들어오는 latents의 length가 consciousness mask의 length와 같아야 함.
-        # 이러려면 처음 max_seq_len가 diffusion까지 계속 똑같이 유지되어야 함.
-        # 아니면 c=1, c=0을 따로 처리해야 함.
+        # + latent_c0(sentence, buffer 모두), latent_c1(sentence만)
         if exists(consciousness_mask):
-            max_neg_value = -torch.finfo(attn.dtype).max
-            consciousness_mask = F.pad(consciousness_mask, (0, latents.shape[-2]), value=True)
+            max_neg_value = -torch.finfo(attn_c1.dtype).max
+            consciousness_mask = F.pad(consciousness_mask, (0, latents_c1.shape[-2]), value=True)
             consciousness_mask = rearrange(consciousness_mask, 'b j -> b 1 1 j')
-            attn = attn.masked_fill(~consciousness_mask, max_neg_value)
-        attn = attn.softmax(dim=-1, dtype=attn.dtype)
-        attn = attn.softmax(dim=-1, dtype=attn.dtype)
-        out = einsum('b h i j, b h j d -> b h i d', attn, v)
+            attn_c1 = attn_c1.masked_fill(~consciousness_mask, max_neg_value)
+        attn_c1 = attn_c1.softmax(dim=-1, dtype=attn_c1.dtype)
+        attn_c0 = attn_c0.softmax(dim=-1, dtype=attn_c0.dtype)
+        out_c1 = einsum('b h i j, b h j d -> b h i d', attn_c1, v)
+        out_c0 = einsum('b h i j, b h j d -> b h i d', attn_c0, v)
+        # 2개의 attention 결과를 concat해서 projection
+        out = self.latents_projection(torch.cat([out_c1, out_c0], dim=-1))
         out = rearrange(out, 'b h n d -> b n (h d)', h=h)
         return self.to_out(out)
 
@@ -300,8 +308,9 @@ class EdisonPerceiverResampler(nn.Module):
     ):
         super().__init__()
         self.pos_emb = AbsolutePositionalEmbedding(dim_input, max_seq_len)
-        self.latents = nn.Parameter(torch.randn(num_latents, dim_latent))
-        nn.init.normal_(self.latents, std = 0.02)
+        self.latents_c1 = nn.Parameter(torch.randn(num_latents, dim_latent))
+        self.latents_c0 = nn.Parameter(torch.randn(num_latents, dim_latent))
+        nn.init.normal_(self.latents_c1, std = 0.02)
         self.layers = nn.ModuleList([])
         for _ in range(num_layers):
             self.layers.append(nn.ModuleList([
@@ -314,14 +323,16 @@ class EdisonPerceiverResampler(nn.Module):
     def forward(self, x, consciousness_mask):
         pos_emb = self.pos_emb(x)
         x = x + pos_emb
-        latents = repeat(self.latents, 'n d -> b n d', b=x.shape[0])
+        latents_c1 = repeat(self.latents_c1, 'n d -> b n d', b=x.shape[0])
+        latents_c0 = repeat(self.latents_c0, 'n d -> b n d', b=x.shape[0])
 
         for attn_layer, ff_layer in self.layers:
-            latents = attn_layer(x, latents, consciousness_mask) + latents
-            latents = ff_layer(latents) + latents
-        latents = self.final_norm(latents)
-        latents = self.l2_normalize_latents(latents)
-        return latents
+            #TODO: 이론적으로 이게 맞는지 확인해보기
+            latents_c1 = attn_layer(x, latents_c1, latents_c0, consciousness_mask) + latents_c1
+            latents_c1 = ff_layer(latents_c1) + latents_c1
+        latents_c1 = self.final_norm(latents_c1)
+        latents_c1 = self.l2_normalize_latents(latents_c1)
+        return latents_c1
 
 class Transformer(nn.Module):
     def __init__(

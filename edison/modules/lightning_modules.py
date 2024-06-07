@@ -242,8 +242,10 @@ class EdisonDiffusion(L.LightningModule):
         self.diffusion_mode = config.diffusion_mode
         self.autoencoder = autoencoder
         self.autoencoder.freeze()
+        
         self.context_diffusion_model = EdisonGaussianDiffusion(config=config, diffusion_type='context')
         self.embedding_diffusion_model = EdisonGaussianDiffusion(config=config, diffusion_type='embedding')
+        # -> 1개의 diffusion으로
         
     def get_position(self, attention_masks):
         """

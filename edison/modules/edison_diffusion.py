@@ -54,7 +54,7 @@ class DiffusionTransformer(nn.Module):
         self.time_mlp = self._build_time_mlp(tx_dim)
         self.time_pos_embed_mlp = nn.Sequential(nn.GELU(), nn.Linear(tx_dim * 4, tx_dim))
         self.pos_emb = AbsolutePositionalEmbedding(tx_dim, max_seq_len)
-        self.encoder = self._build_encoder(tx_dim, tx_depth, heads, dropout, num_dense_connections, tx_dim * 4)
+        self.encoder = self._build_encoder(tx_dim, tx_depth, heads)
 
         self.class_embedding = self._build_class_embedding(tx_dim, num_classes, class_conditional)
         self.null_embedding_seq2seq, self.seq2seq_proj = self._build_seq2seq(seq2seq, seq2seq_context_dim, tx_dim)
@@ -83,7 +83,7 @@ class DiffusionTransformer(nn.Module):
         return Encoder(
             dim=tx_dim,
             depth=tx_depth,
-            heads=heads,
+            num_heads=heads,
         )
 
     def _build_class_embedding(self, tx_dim, num_classes, class_conditional):
