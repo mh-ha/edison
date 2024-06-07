@@ -120,12 +120,15 @@ class RelativePositionEmbedding(nn.Module):
         return relative_position_embedding_weight
 
 
-#TODO: 구현 필요
-# time + noise -> ?
-class ContinuousPositionalEmbedding(nn.Module):
-    pass
-
-
+"""
+# Use case
+time_mlp = nn.Sequential(
+    sinu_pos_emb,
+    nn.Linear(fourier_dim, time_emb_dim),
+    nn.GELU(),
+    nn.Linear(time_emb_dim, time_emb_dim)
+)
+"""
 class SinusoidalPosEmb(nn.Module):
     def __init__(self, dim):
         super().__init__()
@@ -157,6 +160,7 @@ class LearnedSinusoidalPosEmb(nn.Module):
         fouriered = torch.cat((x, fouriered), dim = -1)
         return fouriered
 
+#TODO: ??
 class VariationalFourierFeatures(nn.Module):
     """ following https://arxiv.org/abs/2107.00630 """
 
