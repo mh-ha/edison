@@ -1,16 +1,7 @@
 from collections import namedtuple
 
 from torch import nn, einsum
-import torch.nn.functional as F
 from einops import rearrange
-
-from .utils import default, max_neg_value, init_zero_, groupby_prefix_and_trim
-
-
-DEFAULT_DIM_HEAD = 64
-
-Intermediates = namedtuple('Intermediates', ['pre_softmax_attn', 'post_softmax_attn'])
-LayerIntermediates = namedtuple('Intermediates', ['hiddens', 'attn_intermediates'])
 
 
 class XTAttention(nn.Module):
@@ -18,7 +9,7 @@ class XTAttention(nn.Module):
         self,
         dim,
         num_heads = 8,
-        ):
+    ):
         super().__init__()
         self.dim = dim
         self.num_heads = num_heads
@@ -26,46 +17,15 @@ class XTAttention(nn.Module):
         assert self.head_dim * num_heads == dim, 'dim must be divisible by num_heads'
         self.scale = self.head_dim ** -0.5
         
-        self.words_to_q = nn.Linear(
-            self.dim,
-            self.head_dim*self.num_heads,
-            bias = False,
-            )
-        self.words_to_k = nn.Linear(
-            self.dim,
-            self.head_dim*self.num_heads,
-            bias = False,
-            )
-        self.words_to_v = nn.Linear(
-            self.dim,
-            self.head_dim*self.num_heads,
-            bias = False,
-            )
-        self.position_to_q = nn.Linear(
-            self.dim,
-            self.head_dim*self.num_heads,
-            bias = False,
-            )
-        self.position_to_k = nn.Linear(
-            self.dim,
-            self.head_dim*self.num_heads,
-            bias = False,
-            )
-        self.conscious_to_q = nn.Linear(
-            self.dim,
-            self.head_dim*self.num_heads,
-            bias = False,
-            )
-        self.conscious_to_k = nn.Linear(
-            self.dim,
-            self.head_dim*self.num_heads,
-            bias = False,
-            )
+        self.words_to_q = nn.Linear(self.dim, self.head_dim*self.num_heads, bias = False)
+        self.words_to_k = nn.Linear(self.dim, self.head_dim*self.num_heads, bias = False)
+        self.words_to_v = nn.Linear(self.dim, self.head_dim*self.num_heads, bias = False)
+        self.position_to_q = nn.Linear(self.dim, self.head_dim*self.num_heads, bias = False)
+        self.position_to_k = nn.Linear(self.dim, self.head_dim*self.num_heads, bias = False)
+        self.conscious_to_q = nn.Linear(self.dim, self.head_dim*self.num_heads, bias = False)
+        self.conscious_to_k = nn.Linear(self.dim, self.head_dim*self.num_heads, bias = False)
         
-        self.to_out = nn.Linear(
-            self.head_dim*self.num_heads,
-            self.dim,
-            )
+        self.to_out = nn.Linear(self.head_dim*self.num_heads, self.dim)
     
     # option 1
     def forward(self, x):
@@ -139,67 +99,39 @@ class XTAttention(nn.Module):
         return self.to_out(out)
 
 
-class Attention(nn.Module):
-    def __init__(self, dim, heads=8, dim_head=DEFAULT_DIM_HEAD, dropout=0., **kwargs):
-        super().__init__()
-        self.scale = dim_head ** -0.5
-        self.heads = heads
-        self.dropout = nn.Dropout(dropout)
-        inner_dim = dim_head * heads
-        self.to_qkv = nn.Linear(dim, inner_dim * 3, bias=False)
-        self.to_out = nn.Linear(inner_dim, dim, bias=False)
-        self.attn_fn = F.softmax
-
-    def forward(self, x, mask=None):
-        b, n, _, h = *x.shape, self.heads
-        qkv = self.to_qkv(x).chunk(3, dim=-1)
-        q, k, v = map(lambda t: rearrange(t, 'b n (h d) -> b h n d', h=h), qkv)
-        dots = einsum('b h i d, b h j d -> b h i j', q, k) * self.scale
-        mask_value = max_neg_value(dots)
-        if mask is not None:
-            mask = rearrange(mask, 'b n -> b 1 1 n')
-            dots.masked_fill_(~mask, mask_value)
-        attn = self.attn_fn(dots, dim=-1)
-        attn = self.dropout(attn)
-        out = einsum('b h i j, b h j d -> b h i d', attn, v)
-        out = rearrange(out, 'b h n d -> b n (h d)')
-        return self.to_out(out)
-
 class FeedForward(nn.Module):
-    def __init__(self, dim, dim_out=None, mult=4, dropout=0., **kwargs):
+    def __init__(self, dim, mult=4, dropout=0.):
         super().__init__()
         inner_dim = int(dim * mult)
-        dim_out = default(dim_out, dim)
         self.ff = nn.Sequential(
             nn.Linear(dim, inner_dim),
             nn.GELU(),
             nn.Dropout(dropout),
-            nn.Linear(inner_dim, dim_out),
+            nn.Linear(inner_dim, dim),
             nn.Dropout(dropout)
         )
-        if kwargs.get('zero_init_output', False):
-            init_zero_(self.ff[-1])
 
     def forward(self, x):
         return self.ff(x)
 
+
 class Encoder(nn.Module):
-    def __init__(self, dim, depth, num_heads=8, **kwargs):
+    def __init__(self, dim, depth, num_heads=8):
         super().__init__()
-        ff_kwargs, kwargs = groupby_prefix_and_trim('ff_', kwargs)
-        attn_kwargs, kwargs = groupby_prefix_and_trim('attn_', kwargs)
 
         self.layers = nn.ModuleList()
         for _ in range(depth):
-            self.layers.append(nn.ModuleList([
-                nn.LayerNorm(dim),
-                XTAttention(dim, num_heads=num_heads, **attn_kwargs),
-                nn.LayerNorm(dim),
-                FeedForward(dim, **ff_kwargs)
-            ]))
+            self.layers.append(
+                nn.ModuleList([
+                    nn.LayerNorm(dim),
+                    XTAttention(dim, num_heads),
+                    nn.LayerNorm(dim),
+                    FeedForward(dim)
+                ])
+            )
 
     def forward(self, x, mask=None):
-        #TODO: x should have words, position, conscious
+        #x must be dict, have x["words"], x["position"], x["conscious"]
         for norm1, attn, norm2, ff in self.layers:
             x = attn(norm1(x), mask=mask) + x
             x = ff(norm2(x)) + x

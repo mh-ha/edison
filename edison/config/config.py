@@ -65,7 +65,6 @@ class Config:
     """
     min_buffer_size:int = 5
     buffer_sampling_ratio:float = 0.7   # ratio -> vocab, (1-ratio) -> batch
-    diffusion_mode:str = 'same' # 'same', 'context_first', 'alternately'
     ############################
     # Edison AE
     dim_lm:int = 768
@@ -76,27 +75,27 @@ class Config:
     transformer_decoder:bool = True
     l2_normalize_latents:bool = True
     encoding_mode:str = 'sentence_only'  # 'sentence_only', 'both_separately', 'both_together'
-    # #############################
-    # # Edison context Diffusion
-    # context_pretrained_ae_path:str = ''
-    # context_sampling_timesteps:int = 250
-    # context_loss_type:str = 'l2'
-    # context_objective:str = 'pred_v'
-    # context_scale:float = 1.
-    # context_train_prob_self_cond:float = 0.5
-    # context_tx_dim:int = 768
-    # context_tx_depth:int = 12
-    # context_attn_head_dim:int = 64
-    # context_latent_dim:int = 64     # must be equal to dim_ae
-    # context_lm_dim:int = 768        # must be equal to lm dim(=d_model)
-    # context_dropout:float = 0.1
-    # context_class_conditional:bool = False
-    # context_num_classes:int = 0     # depends on class_conditional and dataset_name
-    # context_class_unconditional_prob:float = 0.1
-    # context_num_samples:int = 1000
-    # context_self_condition:bool = True
-    # context_scale_shift:bool = True
-    # context_num_dense_connections:int = 3
+    #############################
+    # Edison context Diffusion
+    pretrained_ae_path:str = ''
+    sampling_timesteps:int = 250
+    loss_type:str = 'l2'
+    objective:str = 'pred_v'
+    scale:float = 1.
+    train_prob_self_cond:float = 0.5
+    tx_dim:int = 768
+    tx_depth:int = 12
+    attn_head_dim:int = 64
+    latent_dim:int = 64     # must be equal to dim_ae
+    lm_dim:int = 768        # must be equal to lm dim(=d_model)
+    dropout:float = 0.1
+    class_conditional:bool = False
+    num_classes:int = 0     # depends on class_conditional and dataset_name
+    class_unconditional_prob:float = 0.1
+    num_samples:int = 1000
+    self_condition:bool = True
+    scale_shift:bool = True
+    num_dense_connections:int = 3
     # #############################
     # # Edison embedding Diffusion
     # embedding_pretrained_ae_path:str = ''

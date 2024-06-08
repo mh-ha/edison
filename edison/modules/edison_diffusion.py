@@ -143,59 +143,37 @@ class DiffusionTransformer(nn.Module):
 
 
 class EdisonGaussianDiffusion(nn.Module):
-    def __init__(self, config:Config, diffusion_for=None):
+    def __init__(self, config:Config):
         super().__init__()
-        self.diffusion_mode = None if diffusion_for is None else config.diffusion_mode
-        self.diffusion_model = self._initialize_diffusion_model(config, diffusion_for)
+        self.diffusion_model = self._initialize_diffusion_model(config)
         self._initialize_buffers(config)
         self._initialize_schedules(config)
         self.latent_dim = self.diffusion_model.latent_dim
         self.self_condition = self.diffusion_model.self_condition
         self.max_seq_len = config.num_encoder_latents
         self.l2_normalize = False
-        self.objective = config.objective
         self.loss_type = config.loss_type
-        assert self.objective in {'pred_noise', 'pred_x0', 'pred_v', 'pred_v_dual'}, 'objective must be one of pred_noise, pred_x0, pred_v, pred_v_dual'
+        self.objective = config.objective
         if self.diffusion_model.class_conditional and self.diffusion_model.class_unconditional_prob > 0:
             self.class_unconditional_bernoulli = torch.distributions.Bernoulli(probs=self.diffusion_model.class_unconditional_prob)
 
-    def _initialize_diffusion_model(self, config, diffusion_for):
-        if diffusion_for:
-            assert diffusion_for in {'context', 'embedding'}, 'diffusion_for must be one of context, embedding'
-            prefix = f"{diffusion_for}_"
-            return DiffusionTransformer(
-                tx_dim=getattr(config, f'{prefix}tx_dim'),
-                tx_depth=getattr(config, f'{prefix}tx_depth'),
-                heads=getattr(config, f'{prefix}tx_dim') // getattr(config, f'{prefix}attn_head_dim'),
-                latent_dim=getattr(config, f'{prefix}latent_dim'),
-                max_seq_len=config.num_encoder_latents,
-                self_condition=getattr(config, f'{prefix}self_condition'),
-                scale_shift=getattr(config, f'{prefix}scale_shift'),
-                dropout=getattr(config, f'{prefix}dropout'),
-                class_conditional=getattr(config, f'{prefix}class_conditional'),
-                num_classes=getattr(config, f'{prefix}num_classes'),
-                class_unconditional_prob=getattr(config, f'{prefix}class_unconditional_prob'),
-                seq2seq=True,
-                seq2seq_context_dim=getattr(config, f'{prefix}lm_dim'),
-                num_dense_connections=getattr(config, f'{prefix}num_dense_connections'),
-            )
-        else:
-            return DiffusionTransformer(
-                tx_dim=config.tx_dim,
-                tx_depth=config.tx_depth,
-                heads=config.tx_dim // config.attn_head_dim,
-                latent_dim=config.latent_dim,
-                max_seq_len=config.num_encoder_latents,
-                self_condition=config.self_condition,
-                scale_shift=config.scale_shift,
-                dropout=config.dropout,
-                class_conditional=config.class_conditional,
-                num_classes=config.num_classes,
-                class_unconditional_prob=config.class_unconditional_prob,
-                seq2seq=(config.dataset_name in {'xsum', 'qqp', 'qg', 'wmt14-de-en', 'wmt14-en-de'}),
-                seq2seq_context_dim=config.lm_dim,
-                num_dense_connections=config.num_dense_connections
-            )
+    def _initialize_diffusion_model(self, config:Config) -> DiffusionTransformer:
+        return DiffusionTransformer(
+            tx_dim=config.tx_dim,
+            tx_depth=config.tx_depth,
+            heads=config.tx_dim // config.attn_head_dim,
+            latent_dim=config.latent_dim,
+            max_seq_len=config.num_encoder_latents,
+            self_condition=config.self_condition,
+            scale_shift=config.scale_shift,
+            dropout=config.dropout,
+            class_conditional=config.class_conditional,
+            num_classes=config.num_classes,
+            class_unconditional_prob=config.class_unconditional_prob,
+            seq2seq=(config.dataset_name in {'xsum', 'qqp', 'qg', 'wmt14-de-en', 'wmt14-en-de'}),
+            seq2seq_context_dim=config.lm_dim,
+            num_dense_connections=config.num_dense_connections
+        )
 
     def _initialize_buffers(self, config):
         self.register_buffer('latent_mean', torch.zeros(self.latent_dim, dtype=torch.float32))
@@ -206,10 +184,6 @@ class EdisonGaussianDiffusion(nn.Module):
         self.sampling_schedule = partial(time_to_alpha, alpha_schedule=cosine_schedule, scale=config.scale)
         self.sampling_timesteps = config.sampling_timesteps
         self.train_prob_self_cond = config.train_prob_self_cond
-
-    def predict_start_from_noise(self, z_t, t, noise, sampling=False):
-        alpha = self._get_alpha(z_t, t, sampling)
-        return (z_t - (1 - alpha).sqrt() * noise) / alpha.sqrt().clamp(min=1e-8)
 
     def predict_noise_from_start(self, z_t, t, x0, sampling=False):
         alpha = self._get_alpha(z_t, t, sampling)
@@ -232,46 +206,43 @@ class EdisonGaussianDiffusion(nn.Module):
         alpha = schedule(t)
         return right_pad_dims_to(z_t, alpha)
 
-    def normalize_latent(self, x_start):
-        return (x_start - self.latent_mean) / self.latent_scale.clamp(min=1e-5)
-
-    def unnormalize_latent(self, x_start):
-        return x_start * self.latent_scale.clamp(min=1e-5) + self.latent_mean
-
-    def diffusion_model_predictions(self, z_t, mask, t, x_self_cond=None, class_id=None, seq2seq_cond=None, seq2seq_mask=None, sampling=False, cls_free_guidance=1.0, l2_normalize=False):
+    def diffusion_model_predictions(
+        self,
+        z_t,
+        mask,
+        t,
+        x_self_cond=None,
+        class_id=None,
+        seq2seq_cond=None,
+        seq2seq_mask=None,
+        sampling=False,
+        cls_free_guidance=1.0,
+        l2_normalize=False
+    ):
         time_to_alpha = self.sampling_schedule if sampling else self.train_schedule
         time_cond = time_to_alpha(t)
-        model_output = self.diffusion_model(z_t, mask, time_cond, x_self_cond, class_id=class_id, seq2seq_cond=seq2seq_cond, seq2seq_mask=seq2seq_mask)
-
+        model_output = self.diffusion_model(
+            z_t,
+            mask,
+            time_cond,
+            x_self_cond,
+            class_id=class_id,
+            seq2seq_cond=seq2seq_cond,
+            seq2seq_mask=seq2seq_mask
+        )
         if cls_free_guidance != 1.0:
             unc_class_id = torch.full_like(class_id, fill_value=self.diffusion_model.num_classes) if class_id is not None else None
             unc_model_output = self.diffusion_model(z_t, mask, time_cond, x_self_cond, class_id=unc_class_id)
             model_output = model_output * cls_free_guidance + unc_model_output * (1 - cls_free_guidance)
-
         return self._process_model_output(z_t, t, model_output, sampling, l2_normalize)
 
     def _process_model_output(self, z_t, t, model_output, sampling, l2_normalize):
-        pred_v = None
-        if self.objective == 'pred_noise':
-            pred_noise = model_output
-            x_start = self.predict_start_from_noise(z_t, t, pred_noise, sampling=sampling)
-        elif self.objective == 'pred_x0':
-            x_start = model_output
-            pred_noise = self.predict_noise_from_start(z_t, t, x_start, sampling=sampling)
-            pred_v = self.predict_v_from_start_and_eps(z_t, t, x_start, pred_noise, sampling=sampling)
-        elif self.objective == 'pred_v':
-            pred_v = model_output
-            x_start = self.predict_start_from_v(z_t, t, pred_v, sampling=sampling)
-            pred_noise = self.predict_noise_from_v(z_t, t, pred_v, sampling=sampling)
-        else:
-            raise ValueError(f'Invalid objective {self.objective}')
-
-        if l2_normalize:
-            assert sampling
+        x_start = self.predict_start_from_v(z_t, t, model_output, sampling=sampling)
+        pred_noise = self.predict_noise_from_v(z_t, t, model_output, sampling=sampling)
+        if l2_normalize and sampling:
             x_start = F.normalize(x_start, dim=-1) * math.sqrt(x_start.shape[-1])
             pred_noise = self.predict_noise_from_start(z_t, t, x_start, sampling=sampling)
             pred_v = self.predict_v_from_start_and_eps(z_t, t, x_start, pred_noise, sampling=sampling)
-
         return ModelPrediction(pred_noise, x_start, pred_v)
 
     def get_sampling_timesteps(self, batch, device, invert=False):
@@ -321,11 +292,10 @@ class EdisonGaussianDiffusion(nn.Module):
         else:
             raise ValueError(f'Invalid loss type {self.loss_type}')
 
-    def forward(self, txt_latent, mask, class_id, seq2seq_cond=None, seq2seq_mask=None, return_x_start=False, *args, **kwargs):
-        batch, l, d, device = *txt_latent.shape, txt_latent.device
+    def forward(self, txt_latent, mask, class_id, seq2seq_cond, seq2seq_mask):
+        batch, l, d = txt_latent.shape
         assert l == self.max_seq_len, f'length must be {self.max_seq_len}'
-
-        times = torch.zeros((batch,), device=device).uniform_(0, 1.)
+        times = torch.zeros((batch,)).uniform_(0, 1.)
         noise = torch.randn_like(txt_latent)
         alpha = self.train_schedule(times)
         alpha = right_pad_dims_to(txt_latent, alpha)
@@ -336,32 +306,33 @@ class EdisonGaussianDiffusion(nn.Module):
             class_unconditional_mask = self.class_unconditional_bernoulli.sample(class_id.shape).bool()
             class_id[class_unconditional_mask] = self.diffusion_model.num_classes
 
-        self_cond = None
         if self.self_condition and (random.random() < self.train_prob_self_cond):
             with torch.no_grad():
-                model_output = self.diffusion_model_predictions(z_t, mask, times, class_id=class_id, seq2seq_cond=seq2seq_cond, seq2seq_mask=seq2seq_mask)
+                model_output = self.diffusion_model_predictions(
+                    z_t,
+                    mask,
+                    times,
+                    class_id=class_id,
+                    seq2seq_cond=seq2seq_cond,
+                    seq2seq_mask=seq2seq_mask
+                )
                 self_cond = model_output.pred_x_start.detach()
                 if self.l2_normalize:
                     self_cond = F.normalize(self_cond, dim=-1) * math.sqrt(self_cond.shape[-1])
 
-        predictions = self.diffusion_model_predictions(z_t, mask, times, x_self_cond=self_cond, class_id=class_id, seq2seq_cond=seq2seq_cond, seq2seq_mask=seq2seq_mask)
-
-        if self.objective == 'pred_x0':
-            target = txt_latent
-            pred = predictions.pred_x_start
-        elif self.objective == 'pred_noise':
-            target = noise
-            pred = predictions.pred_noise
-        elif self.objective == 'pred_v':
-            target = alpha.sqrt() * noise - (1 - alpha).sqrt() * txt_latent
-            assert predictions.pred_v is not None
-            pred = predictions.pred_v
-
+        predictions = self.diffusion_model_predictions(
+            z_t,
+            mask,
+            times,
+            x_self_cond=self_cond,
+            class_id=class_id,
+            seq2seq_cond=seq2seq_cond,
+            seq2seq_mask=seq2seq_mask
+        )
+        target = alpha.sqrt() * noise - (1 - alpha).sqrt() * txt_latent
+        pred = predictions.pred_v
         loss = self.loss_fn(pred, target, reduction='none')
         loss = rearrange([reduce(loss[i][:torch.sum(mask[i])], 'l d -> 1', 'mean') for i in range(txt_latent.shape[0])], 'b 1 -> b 1')
-
-        if return_x_start:
-            return loss.mean(), predictions.pred_x_start
         return loss.mean()
 
     def _create_mask(self, shape, lengths, device):

@@ -38,10 +38,12 @@ TODO
 
 import lightning as L
 import torch
+from torch import nn
 
 from ..config.config import Config
 from .diffusion import GaussianDiffusion
 from .edison_diffusion import EdisonGaussianDiffusion
+from .positional_embedding import SinusoidalPosEmb
 
 
 class LD4LGAE(L.LightningModule):
@@ -240,77 +242,41 @@ class EdisonDiffusion(L.LightningModule):
         super().__init__()
         self.save_hyperparameters('config')
         self.config = config
-        self.diffusion_mode = config.diffusion_mode
         self.autoencoder = autoencoder
         self.autoencoder.freeze()
         
-        self.context_diffusion_model = EdisonGaussianDiffusion(config=config, diffusion_type='context')
-        self.embedding_diffusion_model = EdisonGaussianDiffusion(config=config, diffusion_type='embedding')
-        # -> 1개의 diffusion으로
+        self.project_to_position = self.get_position_layer()
+        self.diffusion_model = EdisonGaussianDiffusion(config=config)
         
-    def get_position(self, attention_masks):
-        """
-        Get position of each word in sentence
-        buffer words have max value position (i.e. 1.0)
-        """
-        positions = torch.cumsum(attention_masks, dim=1)
-        return positions / positions.max()
+    def get_position_layer(self):
+        return torch.nn.Sequential(
+            SinusoidalPosEmb(self.config.embedding_latent_dim),
+            nn.Linear(self.config.embedding_latent_dim, self.config.context_latent_dim),
+            nn.GELU(),
+            nn.Linear(self.config.context_latent_dim, self.config.context_latent_dim),
+        )
     
-    def get_consciousness(self, attention_masks):
-        """
-        Get consciousness of each word in sentence
-        buffer words have 0.0 value
-        """
-        return attention_masks.clone().float()
-    
-    def forward(self, embedding_latents, context_latents, attention_masks, class_id=None):
-        positions = self.get_position(attention_masks)
-        consciousness = self.get_consciousness(attention_masks)
-        
-        attention_mask = torch.ones(
-            context_latents.shape[0],
-            self.config.num_encoder_latents,
-            dtype=torch.bool,
-            device=context_latents.device,)
-        
-        #TODO: p, c 처리 방식 구현 필요
-        if self.diffusion_mode == 'same':
-            context_latents = self.context_diffusion_model(
-                txt_latent=context_latents,
-                mask=attention_mask,
-                class_id=class_id,
-                seq2seq_cond=embedding_latents,
-                seq2seq_cond_mask=attention_mask,
-                )
-            embedding_latents = self.embedding_diffusion_model(
-                txt_latent=embedding_latents,
-                mask=attention_mask,
-                class_id=class_id,
-                seq2seq_cond=context_latents,
-                seq2seq_cond_mask=attention_mask,
-                )
-            return context_latents, embedding_latents
-        
-        #TODO(P1): context와 embedding을 처리하는 로직 필요 - 'context_first', 'alternately'
-        elif self.diffusion_mode == 'context_first':
-            NotImplementedError("context_first not implemented")
-        elif self.diffusion_mode == 'alternately':
-            NotImplementedError("alternately not implemented")
-            
-        else:
-            raise ValueError(f"diffusion_mode: {self.diffusion_mode} not supported")
+    def forward(self, embedding_latents, context_latents, attention_mask, class_id=None):
+        latents = self.diffusion_model(
+            txt_latent=context_latents,
+            mask=attention_mask,
+            class_id=class_id,
+            seq2seq_cond=embedding_latents,
+            seq2seq_cond_mask=attention_mask,
+        )
+        return latents
         
     def training_step(self, batch, batch_idx):
+        print(batch)
         inputs = batch['input_ids']
-        attention_masks = batch['attention_mask']
+        attention_mask = batch['attention_mask']
         class_id = batch['label'] if 'label' in batch else None
-        context_latents, embedding_latents = self.autoencoder.encode(inputs, attention_masks, return_embeddings=True)
-        loss = self.forward(embedding_latents, context_latents, attention_masks, class_id)
+        context_latents, embedding_latents = self.autoencoder.encode(inputs, attention_mask, return_embeddings=True)
+        loss = self(embedding_latents, context_latents, attention_mask, class_id)
         self.log('loss', loss, on_step=True, prog_bar=True)
         return loss
 
     def configure_optimizers(self):
-        return torch.optim.AdamW([
-            {'params': self.context_diffusion_model.parameters()},
-            {'params': self.embedding_diffusion_model.parameters()},
-            ], lr=self.config.learning_rate)
+        return torch.optim.AdamW(
+            self.diffusion_model.parameters(),
+            lr=self.config.learning_rate)
