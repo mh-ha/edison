@@ -198,31 +198,31 @@ class EdisonAE(L.LightningModule):
         return encoder_outputs
 
     def decode(self, encoder_outputs):
-        decoder_outputs = self.ae.decode(encoder_outputs['last_hidden_state'])
-        outputs = self.lm(encoder_outputs=decoder_outputs)
-        return outputs['logits']
+        ae_decoder_outputs = self.ae.decode(encoder_outputs)
+        outputs_c1 = self.lm(encoder_outputs=ae_decoder_outputs['latents_c1'])
+        outputs_c0 = self.lm(encoder_outputs=ae_decoder_outputs['latents_c0'])
+        return {'logits_c1':outputs_c1['logits'], 'logits_c0':outputs_c0['logits']}
 
     def training_step(self, batch, batch_idx):
         inputs = batch['input_ids']
         attention_masks = batch['attention_mask']
         targets = batch['labels']
-        # print(f"start: {inputs.shape} {attention_masks.shape} {targets.shape}")
+        targets_c0 = batch['labels_c0']
         # LM encoder outputs
         encoder_outputs = self.lm.get_encoder()(
             input_ids = inputs,
             attention_mask = attention_masks)
-        # print(f"LM encoder outputs: {encoder_outputs['last_hidden_state'].shape}")
         # AE encoder, decoder outputs
-        encoder_outputs = self.ae(
+        ae_encoder_outputs = self.ae.encode(
             encoder_outputs['last_hidden_state'],
             attention_mask=attention_masks)
-        # print(f"AE outputs - {encoder_outputs.shape}")
+        ae_decoder_outputs = self.ae.decode(ae_encoder_outputs)
         # LM decoder outputs (loss)
-        outputs = self.lm(
-            labels=targets,
-            encoder_outputs=encoder_outputs)
-        loss = outputs.loss
-        # print(f"decoder logits outputs: {outputs.logits.shape}")
+        outputs_c1 = self.lm(labels=targets, encoder_outputs=ae_decoder_outputs['latents_c1'])
+        outputs_c0 = self.lm(labels=targets_c0, encoder_outputs=ae_decoder_outputs['latents_c0'])
+        loss_c1 = outputs_c1.loss
+        loss_c0 = outputs_c0.loss
+        loss = loss_c1 + loss_c0
         # print(f"loss: {loss}")
         self.log('loss', loss, on_step=True, prog_bar=True)
         return loss

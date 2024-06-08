@@ -298,5 +298,6 @@ class XTDataCollatorForBartDenoisingLM:
                 "decoder_input_ids": batch["decoder_input_ids"],
                 "attention_mask": attention_mask,
                 "decoder_attention_mask": batch["decoder_attention_mask"],
+                "labels_c0": input_ids.clone()
             }
         )

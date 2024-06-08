@@ -210,7 +210,6 @@ class EdisonPerceiverAttention(nn.Module):
         self.to_q = nn.Linear(dim_latent, self.inner_dim, bias=False)
         # self.latent_to_kv = nn.Linear(dim_latent, self.inner_dim * 2, bias=False) if dim_latent != dim_input else None
         self.to_kv = nn.Linear(dim_input, self.inner_dim * 2, bias=False)
-        self.latents_projection = nn.Linear(self.inner_dim * 2, self.inner_dim)
         self.to_out = nn.Linear(self.inner_dim, dim_latent)
 
     def forward(self, x, latents_c1, latents_c0, consciousness_mask):
@@ -325,6 +324,7 @@ class EdisonPerceiverResampler(nn.Module):
         x = x + pos_emb
         latents_c1 = repeat(self.latents_c1, 'n d -> b n d', b=x.shape[0])
         latents_c0 = repeat(self.latents_c0, 'n d -> b n d', b=x.shape[0])
+        # print(x.shape, latents_c1.shape, latents_c0.shape, consciousness_mask.shape)
 
         for attn_layer, ff_layer in self.layers:
             in_c1 = latents_c1
@@ -338,7 +338,8 @@ class EdisonPerceiverResampler(nn.Module):
         latents_c1 = self.l2_normalize_latents(latents_c1)
         latents_c0 = self.final_norm(latents_c0)
         latents_c0 = self.l2_normalize_latents(latents_c0)
-        return latents_c1, latents_c0
+        # print(latents_c1.shape, latents_c0.shape)
+        return {'latents_c1': latents_c1, 'latents_c0': latents_c0}
 
 class Transformer(nn.Module):
     def __init__(
@@ -415,9 +416,8 @@ class PerceiverAutoEncoder(nn.Module):
         return self.perceiver_encoder(encoder_outputs, mask=attention_mask.bool())
 
     def forward(self, encoder_outputs, attention_mask):
-        encoder_latents = self.perceiver_encoder(
-            encoder_outputs, mask=attention_mask.bool())
-        decoder_outputs = self.perceiver_decoder(encoder_latents)
+        encoder_latents = self.encode(encoder_outputs, attention_mask.bool())
+        decoder_outputs = self.decode(encoder_latents)
         return decoder_outputs
 
 
@@ -453,7 +453,9 @@ class EdisonPerceiverAutoEncoder(nn.Module):
             dim_head=dim_head, max_seq_len=num_encoder_latents, ff_mult=ff_mult)
 
     def decode(self, ae_latent):
-        return self.perceiver_decoder(ae_latent)
+        ae_latent_c1 = self.perceiver_decoder(ae_latent['latents_c1'])
+        ae_latent_c0 = self.perceiver_decoder(ae_latent['latents_c0'])
+        return {'latents_c1': ae_latent_c1, 'latents_c0': ae_latent_c0}
     
     def encode(self, encoder_outputs, attention_mask):
         if self.encoding_mode == 'both_together':
