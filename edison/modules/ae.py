@@ -142,9 +142,9 @@ class Attention(nn.Module):
 class PerceiverAttention(nn.Module):
     def __init__(
         self,
-        *,
         dim_input,
         dim_latent,
+        *,
         dim_head=64,
         qk_norm=True,
     ):
@@ -159,7 +159,7 @@ class PerceiverAttention(nn.Module):
         self.to_q = nn.Linear(dim_latent, self.inner_dim, bias=False)
         self.latent_to_kv = nn.Linear(dim_latent, self.inner_dim * 2, bias=False) if dim_latent != dim_input else None
         self.to_kv = nn.Linear(dim_input, self.inner_dim * 2, bias=False)
-        self.to_out = nn.Linear(self.inner_dim, dim_latent),
+        self.to_out = nn.Linear(self.inner_dim, dim_latent)
 
     def forward(self, x, latents, mask=None):
         # init
@@ -193,9 +193,9 @@ class PerceiverAttention(nn.Module):
 class EdisonPerceiverAttention(nn.Module):
     def __init__(
         self,
-        *,
         dim_input,#d_model
         dim_latent,#dim_ae
+        *,
         dim_head=64,
         qk_norm=True,
     ):
@@ -211,7 +211,7 @@ class EdisonPerceiverAttention(nn.Module):
         # self.latent_to_kv = nn.Linear(dim_latent, self.inner_dim * 2, bias=False) if dim_latent != dim_input else None
         self.to_kv = nn.Linear(dim_input, self.inner_dim * 2, bias=False)
         self.latents_projection = nn.Linear(self.inner_dim * 2, self.inner_dim)
-        self.to_out = nn.Linear(self.inner_dim, dim_latent),
+        self.to_out = nn.Linear(self.inner_dim, dim_latent)
 
     def forward(self, x, latents_c1, latents_c0, consciousness_mask):
         # init
@@ -238,30 +238,30 @@ class EdisonPerceiverAttention(nn.Module):
         # attention
         attn_c1 = einsum('b h i d, b h j d  -> b h i j', self.query_norm(q_c1) * self.scale, self.key_norm(k))
         attn_c0 = einsum('b h i d, b h j d  -> b h i j', self.query_norm(q_c0) * self.scale, self.key_norm(k))
-        #COMMENT: attention mechanism에서 softmax 후의 score에 대해서 위와 같은 matrix를 곱하고 softmax를 가하는 dim에 대해서 renormalize (sum으로 나눠줌)하면 됩니다.
-        # + latent_c0(sentence, buffer 모두), latent_c1(sentence만)
         if exists(consciousness_mask):
             max_neg_value = -torch.finfo(attn_c1.dtype).max
-            consciousness_mask = F.pad(consciousness_mask, (0, latents_c1.shape[-2]), value=True)
+            # print(consciousness_mask.shape)
+            # consciousness_mask = F.pad(consciousness_mask, (0, latents_c1.shape[-2]), value=True)
+            # print(consciousness_mask.shape, latents_c1.shape[-2])
             consciousness_mask = rearrange(consciousness_mask, 'b j -> b 1 1 j')
+            # print(consciousness_mask.shape, attn_c1.shape, max_neg_value)
             attn_c1 = attn_c1.masked_fill(~consciousness_mask, max_neg_value)
         attn_c1 = attn_c1.softmax(dim=-1, dtype=attn_c1.dtype)
         attn_c0 = attn_c0.softmax(dim=-1, dtype=attn_c0.dtype)
         out_c1 = einsum('b h i j, b h j d -> b h i d', attn_c1, v)
         out_c0 = einsum('b h i j, b h j d -> b h i d', attn_c0, v)
-        # 2개의 attention 결과를 concat해서 projection
-        out = self.latents_projection(torch.cat([out_c1, out_c0], dim=-1))
-        out = rearrange(out, 'b h n d -> b n (h d)', h=h)
-        return self.to_out(out)
+        out_c1 = rearrange(out_c1, 'b h n d -> b n (h d)', h=h)
+        out_c0 = rearrange(out_c0, 'b h n d -> b n (h d)', h=h)
+        return self.to_out(out_c1), self.to_out(out_c0)
 
 
 class PerceiverResampler(nn.Module):
     def __init__(
         self,
-        *,
         dim_input,
         dim_latent,
         num_layers,
+        *,
         dim_head=64,
         num_latents=16,
         max_seq_len=64,
@@ -275,7 +275,7 @@ class PerceiverResampler(nn.Module):
         self.layers = nn.ModuleList([])
         for _ in range(num_layers):
             self.layers.append(nn.ModuleList([
-                PerceiverAttention(dim_input, dim_latent, dim_head),
+                PerceiverAttention(dim_input, dim_latent, dim_head=dim_head),
                 FeedForward(dim_latent, ff_mult)
             ]))
         self.l2_normalize_latents = lambda x: F.normalize(x, dim=-1) * math.sqrt(x.shape[-1]) if l2_normalize_latents else lambda x: x
@@ -314,7 +314,7 @@ class EdisonPerceiverResampler(nn.Module):
         self.layers = nn.ModuleList([])
         for _ in range(num_layers):
             self.layers.append(nn.ModuleList([
-                EdisonPerceiverAttention(dim_input, dim_latent, dim_head),
+                EdisonPerceiverAttention(dim_input, dim_latent, dim_head=dim_head),
                 FeedForward(dim_latent, ff_mult)
             ]))
         self.l2_normalize_latents = lambda x: F.normalize(x, dim=-1) * math.sqrt(x.shape[-1]) if l2_normalize_latents else lambda x: x
@@ -327,12 +327,18 @@ class EdisonPerceiverResampler(nn.Module):
         latents_c0 = repeat(self.latents_c0, 'n d -> b n d', b=x.shape[0])
 
         for attn_layer, ff_layer in self.layers:
-            #TODO: 이론적으로 이게 맞는지 확인해보기
-            latents_c1 = attn_layer(x, latents_c1, latents_c0, consciousness_mask) + latents_c1
+            in_c1 = latents_c1
+            in_c0 = latents_c0
+            latents_c1, latents_c0 = attn_layer(x, latents_c1, latents_c0, consciousness_mask)
+            latents_c1 = latents_c1 + in_c1
+            latents_c0 = latents_c0 + in_c0
             latents_c1 = ff_layer(latents_c1) + latents_c1
+            latents_c0 = ff_layer(latents_c0) + latents_c0
         latents_c1 = self.final_norm(latents_c1)
         latents_c1 = self.l2_normalize_latents(latents_c1)
-        return latents_c1
+        latents_c0 = self.final_norm(latents_c0)
+        latents_c0 = self.l2_normalize_latents(latents_c0)
+        return latents_c1, latents_c0
 
 class Transformer(nn.Module):
     def __init__(
@@ -372,10 +378,10 @@ class Transformer(nn.Module):
 class PerceiverAutoEncoder(nn.Module):
     def __init__(
         self,
-        *,
         dim_lm,
         dim_ae,
         num_layers,
+        *,
         dim_head=64,
         num_encoder_latents=32,
         num_decoder_latents=32,
@@ -418,10 +424,10 @@ class PerceiverAutoEncoder(nn.Module):
 class EdisonPerceiverAutoEncoder(nn.Module):
     def __init__(
         self,
-        *,
         dim_lm,
         dim_ae,
         num_layers,
+        *,
         dim_head=64,
         num_encoder_latents=32,
         num_decoder_latents=32,
@@ -464,7 +470,6 @@ class EdisonPerceiverAutoEncoder(nn.Module):
         return encoder_outputs
 
     def forward(self, encoder_outputs, attention_mask):
-        encoder_latents = self.perceiver_encoder(
-            encoder_outputs, mask=attention_mask.bool())
-        decoder_outputs = self.perceiver_decoder(encoder_latents)
+        encoder_latents = self.encode(encoder_outputs, attention_mask)
+        decoder_outputs = self.decode(encoder_latents)
         return decoder_outputs

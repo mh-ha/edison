@@ -131,12 +131,12 @@ def get_xtdataloader(
             text = example["text"]
         
         # add extra padding tokens for buffer
-        text = text[:max_seq_len]
+        text = text[:max_seq_len-min_buffer_size]
         return tokenizer(
             text,
             padding="max_length",
             truncation=True,
-            max_length=max_seq_len+min_buffer_size)
+            max_length=max_seq_len)
 
     collate_fn=XTDataCollatorForBartDenoisingLM(tokenizer, decoder_start_token_id, config)
     
@@ -246,13 +246,11 @@ class XTDataCollatorForBartDenoisingLM:
     tokenizer: PreTrainedTokenizerBase
     decoder_start_token_id: int
     config: Config = None
-    vocab_size = len(tokenizer)
 
     def __call__(self, examples: List[Dict[str, List[int]]]) -> BatchEncoding:
         batch = BatchEncoding(
             {k: torch.LongTensor([examples[i][k] for i in range(len(examples))]) for k, v in examples[0].items()}
         )
-
         batch["labels"] = batch["input_ids"].clone()
         batch["decoder_input_ids"] = shift_tokens_right(
             batch["labels"], self.tokenizer.pad_token_id, self.decoder_start_token_id
@@ -263,30 +261,36 @@ class XTDataCollatorForBartDenoisingLM:
         
         # add buffer words
         if self.config is not None:
-            sampled_words = self.sample_words_from_vocab_and_batch(batch)
-            batch = self.replace_pad_to_sampled_word(batch, sampled_words)
+            sampled_words = self._sample_words_from_vocab_and_batch(batch)
+            batch = self._replace_pad_to_sampled_word(batch, sampled_words)
         return batch
     
-    def sample_words_from_vocab_and_batch(self, batch):
-        num_sampling = torch.sum((batch["attention_mask"] == 0).long())
-        batch_words = set(batch["input_ids"][batch["attention_mask"]]) - {self.tokenizer.pad_token_id}
+    def _sample_words_from_vocab_and_batch(self, batch):
+        num_sampling = torch.sum((batch["attention_mask"] == 0)).long()
+        batch_words = set(batch["input_ids"].view(-1).tolist()) - set(self.tokenizer.all_special_ids)
+        # print(f"######batch_words: {batch_words}")
         ratio = self.config.buffer_sampling_ratio
         num_sample_from_vocab = int(num_sampling * ratio)
         num_sample_from_batch = num_sampling - num_sample_from_vocab
         # sample from batch_words, vocab_words using ratio
-        sampled_words = torch.LongTensor(
-            [random.choice(list(range(self.vocab_size))) for _ in range(num_sample_from_vocab)] +
-            [random.choice(list(batch_words)) for _ in range(num_sample_from_batch)]
-            ).to(batch["input_ids"].device)
+        sampled_words = torch.randint(0, len(self.tokenizer), (num_sample_from_vocab,)).tolist()
+        sampled_words += [random.choice(list(batch_words)) for _ in range(num_sample_from_batch)]
+        sampled_words = torch.Tensor(sampled_words).to(torch.long).to(batch["input_ids"].device)
         # shuffle sampled_words
+        # print(f"######sampled_words: {sampled_words}")
         sampled_words = sampled_words[torch.randperm(len(sampled_words))]
+        # print(f"######sampled_words: {sampled_words}")
         return sampled_words
         
-    def replace_pad_to_sampled_word(self, batch, sampled_words):
+    def _replace_pad_to_sampled_word(self, batch, sampled_words):
         # replace pad_token_ids to sampled words
         input_ids = batch["input_ids"].clone()
         attention_mask = batch["attention_mask"].clone()
-        input_ids[attention_mask == 0] = sampled_words
+        # print(f"######input_ids.shape: {input_ids.shape}")
+        # print(f"######input_ids[0]: {input_ids[0]}")
+        # print(f"######sampled_words: {sampled_words.view(input_ids[attention_mask == 0].shape)}")
+        input_ids[attention_mask == 0] = sampled_words.view(input_ids[attention_mask == 0].shape)
+        # print(f"######after fill input_ids[0]: {input_ids[0]}")
         return BatchEncoding(
             {
                 "input_ids": input_ids,

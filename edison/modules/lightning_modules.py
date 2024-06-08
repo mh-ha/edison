@@ -161,7 +161,8 @@ class EdisonAE(L.LightningModule):
         config:Config,
         lm:torch.nn.Module,
         ae:torch.nn.Module,
-        ):
+    ):
+        super().__init__()
         self.save_hyperparameters('config')
         self.config = config
         self.lm = lm

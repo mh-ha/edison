@@ -129,7 +129,6 @@ class TrainFunction:
             l2_normalize_latents=self.config.l2_normalize_latents,
             encoding_mode=self.config.encoding_mode
             )
-
         # 3. init lightning module using LM and AE
         # training_step: inputs['input_ids', 'attention_mask'], target -> loss
         # forward: inputs['input_ids', 'attention_mask'] -> encoder_outputs

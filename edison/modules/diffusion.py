@@ -65,7 +65,7 @@ class DiffusionTransformer(nn.Module):
         self.class_unconditional_prob = class_unconditional_prob
         self.seq2seq = seq2seq
         self.dense_output_connection = dense_output_connection
-        
+        self.cross_attend=self.seq2seq
 
         self.max_seq_len = max_seq_len
 
@@ -149,7 +149,7 @@ class DiffusionTransformer(nn.Module):
         x_input = self.input_proj(x)
         tx_input = x_input + pos_emb + self.time_pos_embed_mlp(time_emb)
 
-        if self.cross:
+        if self.cross_attend:
             context, context_mask = [], []
             if self.seq2seq:
                 if seq2seq_cond is None:

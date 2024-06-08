@@ -129,6 +129,8 @@ time_mlp = nn.Sequential(
     nn.Linear(time_emb_dim, time_emb_dim)
 )
 """
+# 이게 기본, 나머지 트릭(norm)은 실험 후 관찰
+# standardization moving average 방식
 class SinusoidalPosEmb(nn.Module):
     def __init__(self, dim):
         super().__init__()
@@ -160,7 +162,6 @@ class LearnedSinusoidalPosEmb(nn.Module):
         fouriered = torch.cat((x, fouriered), dim = -1)
         return fouriered
 
-#TODO: ??
 class VariationalFourierFeatures(nn.Module):
     """ following https://arxiv.org/abs/2107.00630 """
 
