@@ -1,26 +1,3 @@
-"""
-entry point for the application
-parsing arguments:
-    hidden_dim:int = 768
-    embedding_dim:int = 768
-    padding_idx:int = 0
-    vocab_size:int = 128001
-    absolute_position_biased_input:bool = True
-    num_heads:int = 12
-    num_head_dim:int = 64
-    layernorm_eps:float = 1e-9
-    hidden_dropout_prob:float = 0.1
-    num_hidden_layers:int = 12
-    device:str = 'cuda'
-    max_seq_len:int = 512
-    mask_lm_prob:float = 0.15
-    max_preds_per_seq:int = None
-    learning_rate:float = 1e-4
-    batch_size:int = 4
-    gradient_clip_val:float = 1.0
-    gradient_clip_algorithm:str = 'norm'`
-"""
-
 import argparse
 import yaml
 
@@ -89,14 +66,7 @@ def main():
     )
     print(trainer_config)
     print(config)
-    tokenizer = AutoTokenizer.from_pretrained(config.tokenizer_name)
-    data_module = LMDataModule(config, tokenizer)
-    model = LM(config)
-    if config.load_pretrained_weights:
-        from edison.modules.load_state import load_pretrained_LM
-        model, _, _ = load_pretrained_LM(model, config)
-    trainer = L.Trainer(**trainer_config)
-    trainer.fit(model, datamodule=data_module)
+    
 
 if __name__ == '__main__':
     main()

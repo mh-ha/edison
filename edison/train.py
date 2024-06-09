@@ -15,7 +15,6 @@ from .modules.lm import get_BART
 from .modules.ae import PerceiverAutoEncoder, EdisonPerceiverAutoEncoder
 from .modules.lightning_modules import LD4LGAE, LD4LGDiffusion, EdisonAE, EdisonDiffusion
 from .modules.lightning_data_module import get_dataset, get_dataloader, get_xtdataloader
-from .modules.tokens import TokenConverter
 from .trainer import get_trainer
 from .config.config import Config
 
