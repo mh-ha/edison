@@ -198,7 +198,7 @@ def main(config:Config):
             train_function.train_LD4LG_Diffusion()
         else:
             raise ValueError(f'{config.train_for} is not supported')
-    elif config.model_name == 'edison':
+    elif config.model_name == 'Edison':
         if config.train_for == 'AE':
             train_function.train_edison_AE()
         elif config.train_for == 'Diffusion':
