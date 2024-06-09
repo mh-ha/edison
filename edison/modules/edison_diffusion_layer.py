@@ -1,7 +1,9 @@
+import torch
 from torch import nn, einsum
-from einops import rearrange
+from einops import rearrange, repeat
 
 from .residual import TimeConditionedResidual, GRUGating
+from .positional_embedding import SinusoidalPosEmb, ConsciousnessEmbedding
 
 
 class XTAttention(nn.Module):
@@ -132,7 +134,8 @@ class FeedForward(nn.Module):
 class Encoder(nn.Module):
     def __init__(self, dim, cross_dim, depth, num_heads=8, ff_mult=4):
         super().__init__()
-
+        self.dim = dim
+        self.ff_mult = ff_mult
         self.layers = nn.ModuleList()
         for _ in range(depth):
             self.layers.append(
@@ -148,10 +151,39 @@ class Encoder(nn.Module):
                     TimeConditionedResidual(dim*ff_mult, dim),
                 ])
             )
+        self.project_embedding_to_position = self._get_continuous_position_layer()
+        self.project_embedding_to_conscious = self._get_conscious_layer()
 
-    def forward(self, x, cross_kv, time_emb=None):
-        # x must be dict, have x['tx_input'], x['position'], x['conscious']
-        words, position, conscious = x['tx_input'], x['position'], x['conscious']
+    def _get_continuous_position_layer(self):
+        return torch.nn.Sequential(
+            SinusoidalPosEmb(self.dim),
+            nn.Linear(self.dim, self.dim * self.ff_mult),
+            nn.GELU(),
+            nn.Linear(self.dim * self.ff_mult, self.dim),
+        )
+    
+    # def _get_relative_position_layer(self):
+        
+    
+    def _get_conscious_layer(self):
+        return ConsciousnessEmbedding(
+            dim=self.dim,
+            num_flag=2,
+        )
+    
+    def _get_xt_data(self, words, attention_mask):
+        # 여기서 position은 CPE(continuous position embedding)
+        position_input = torch.arange(words.shape[1], device=words.device)
+        position_input = repeat(position_input, 'n -> b n', b=words.shape[0])
+        # make buffer word position to zero
+        position_input = (position_input+1) * attention_mask
+        position = self.project_embedding_to_position(position_input)
+        conscious = self.project_embedding_to_conscious(attention_mask=attention_mask)
+        return position, conscious
+        
+    def forward(self, words, cross_kv, attention_mask, time_emb=None):
+        position, conscious = self._get_xt_data(words, attention_mask)
+        
         for norm1, cross_attn, cross_attn_residual, norm2, self_attn, self_attn_residual, norm3, ff, ff_residual in self.layers:
             residual = words
             words = cross_attn(norm1(words), position, conscious, cross_kv)

@@ -59,9 +59,9 @@ class RelativePositionEmbedding(nn.Module):
             max_seq_len:int=512,
             hidden_dim:int=768,
             layer_norm_eps:float=1e-9,
-            share_attention_weights:bool=True,
             normalize_relative_embedding:bool=True,
-            **kwargs):
+            **kwargs
+    ):
         super().__init__()
         self.num_heads = num_heads
         self.num_head_dim = num_head_dim
@@ -69,39 +69,29 @@ class RelativePositionEmbedding(nn.Module):
         self.position_bucket = self.max_seq_len // 2
         self.hidden_dim = hidden_dim
         self.layer_norm_eps = layer_norm_eps
-        self.share_attention_weights = share_attention_weights
         self.normalize_relative_embedding = normalize_relative_embedding
         self.relative_position_embedding_layer = nn.Embedding(max_seq_len, hidden_dim)
         if normalize_relative_embedding:
             self.layernorm = nn.LayerNorm(hidden_dim, layer_norm_eps)
-        if not share_attention_weights:
-            self.relative_position_query_layer = nn.Linear(hidden_dim, hidden_dim)
-            self.relative_position_key_layer = nn.Linear(hidden_dim, hidden_dim)
+        self.relative_position_query_layer = nn.Linear(hidden_dim, hidden_dim)
+        self.relative_position_key_layer = nn.Linear(hidden_dim, hidden_dim)
 
-    def forward(self, hidden_states:torch.Tensor, query_layer:nn.Linear=None, key_layer:nn.Linear=None):
-        # hidden_states: (batch, seq_len, hidden_dim)
-        batch_size, seq_len, hidden_dim = hidden_states.shape
+    def forward(self, seq_len:int):
         relative_position_idx = self.generate_relative_position(seq_len)
         # relative_position: (1, seq_len(q), seq_len(k))
         relative_position_embedding = self.generate_relative_position_embedding()
         # relative_position_embedding: (1, max_seq_len, hidden_dim)
-        if not self.share_attention_weights:
-            relative_position_query = self.relative_position_query_layer(relative_position_embedding)
-            relative_position_key = self.relative_position_key_layer(relative_position_embedding)
-        else:
-            relative_position_query = query_layer(relative_position_embedding)
-            relative_position_key = key_layer(relative_position_embedding)
-        relative_position_idx = torch.clamp(relative_position_idx + self.position_bucket, 0, self.position_bucket*2-1).squeeze(0).to(hidden_states.device)
+        relative_position_query = self.relative_position_query_layer(relative_position_embedding)
+        relative_position_key = self.relative_position_key_layer(relative_position_embedding)
+        relative_position_idx = torch.clamp(relative_position_idx + self.position_bucket, 0, self.position_bucket*2-1).squeeze(0)
         # relative_position_query: (max_seq_len, hidden_dim)
         # relative_position_key: (max_seq_len, hidden_dim)
         # relative_position_idx: (1, seq_len(q), seq_len(k))
-
         return (relative_position_query, relative_position_key, relative_position_idx)
 
     def generate_relative_position(self, seq_len:int):
         relative_position = self.build_relative_position(seq_len, seq_len)
         return relative_position
-    
 
     def make_log_bucket_dict(self, bucket_size, max_position):
         relative_pos = torch.arange(-max_position, max_position)
@@ -111,6 +101,7 @@ class RelativePositionEmbedding(nn.Module):
         log_pos = torch.ceil(torch.log(abs_pos/mid)/torch.log(torch.tensor(max_position-1)/mid) * (mid-1)) + mid
         bucket_pos = torch.where(abs_pos<=mid, relative_pos, (log_pos*sign).to(relative_pos)).to(torch.long)
         return bucket_pos
+    
     def make_log_bucket_position(self, relative_pos, bucket_size, max_position):
         relative_pos = torch.clamp(relative_pos,-max_position+1, max_position-1) + max_position
         bucket_dict = self.make_log_bucket_dict(bucket_size, max_position)
@@ -118,6 +109,7 @@ class RelativePositionEmbedding(nn.Module):
             bucket_dict = bucket_dict.unsqueeze(0)
             bucket_pos = torch.gather(bucket_dict.expand(list(relative_pos.size())[:-1] + [bucket_dict.size(-1)]), index=relative_pos.long(), dim=-1)
         return bucket_pos
+    
     def build_relative_position(self, query_size, key_size, bucket_size=-1, max_position=-1):
         q_ids = torch.arange(0, query_size)
         k_ids = torch.arange(0, key_size)
@@ -128,7 +120,6 @@ class RelativePositionEmbedding(nn.Module):
         rel_pos_ids = rel_pos_ids.unsqueeze(0)
         return rel_pos_ids
     
-
     def generate_relative_position_embedding(self):
         if self.normalize_relative_embedding:
             relative_position_embedding_weight = self.layernorm(self.relative_position_embedding_layer.weight)

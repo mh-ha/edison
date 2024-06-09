@@ -39,6 +39,7 @@ TODO
 import lightning as L
 import torch
 from torch import nn
+from einops import repeat
 
 from ..config.config import Config
 from .diffusion import GaussianDiffusion
@@ -246,36 +247,7 @@ class EdisonDiffusion(L.LightningModule):
         self.autoencoder = autoencoder
         self.autoencoder.freeze()
         
-        self.project_embedding_to_position = self._get_position_layer()
-        self.project_embedding_to_conscious = self._get_conscious_layer()
         self.diffusion_model = EdisonGaussianDiffusion(config=config)
-        
-    def _get_position_layer(self):
-        return torch.nn.Sequential(
-            SinusoidalPosEmb(self.config.lm_dim),
-            nn.Linear(self.config.lm_dim, self.config.lm_dim * self.config.feedforward_mult),
-            nn.GELU(),
-            nn.Linear(self.config.lm_dim * self.config.feedforward_mult, self.config.lm_dim),
-        )
-    
-    def _get_conscious_layer(self):
-        return ConsciousnessEmbedding(
-            dim=self.config.lm_dim,
-            num_flag=2,
-        )
-    
-    def _get_xt_data(self, latents, attention_mask):
-        position_input = torch.arange(latents.shape[1], device=latents.device)
-        position_input = position_input.unsqueeze(0).expand(latents.shape[0], -1)
-        position = self.project_embedding_to_position(position_input)
-        conscious = self.project_embedding_to_conscious(attention_mask=attention_mask)
-        # print(f"latents: {latents.shape}, position: {position.shape}, conscious: {conscious.shape}")
-        return {
-            'words':latents,
-            'position':position,
-            'conscious':conscious,
-        }
-        
     
     def forward(self, embedding_latents, context_latents, attention_mask, class_id=None):
         # TODO: implement latents_c0 process
@@ -283,11 +255,11 @@ class EdisonDiffusion(L.LightningModule):
             NotImplementedError('latents_c0 not implemented')
         context_latents = context_latents['latents_c1']
         
-        embedding_latents = self._get_xt_data(embedding_latents, attention_mask)
+        # embedding_latents = self._get_xt_data(embedding_latents, attention_mask)
         latents = self.diffusion_model(
             embedding_latents=embedding_latents,
             context_latents=context_latents,
-            mask=attention_mask,
+            embedding_latents_mask=attention_mask,
             class_id=class_id,
             context_latents_mask=attention_mask,
         )
