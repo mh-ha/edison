@@ -43,7 +43,7 @@ from torch import nn
 from ..config.config import Config
 from .diffusion import GaussianDiffusion
 from .edison_diffusion import EdisonGaussianDiffusion
-from .positional_embedding import SinusoidalPosEmb
+from .positional_embedding import SinusoidalPosEmb, ConsciousnessEmbedding
 
 
 class LD4LGAE(L.LightningModule):
@@ -171,6 +171,7 @@ class EdisonAE(L.LightningModule):
         # Freeze LM
         for param in lm.parameters():
             param.requires_grad = False
+        self.lm_input_embeddings = lm.get_input_embeddings()
         self.ae = ae
 
     def forward(self, batch):
@@ -195,7 +196,7 @@ class EdisonAE(L.LightningModule):
             encoder_outputs['last_hidden_state'],
             attention_mask=attention_masks)
         if return_embeddings:
-            embeddings = self.lm.embeddings.word_embeddings(input_ids)
+            embeddings = self.lm_input_embeddings(input_ids)
             return encoder_outputs, embeddings
         return encoder_outputs
 
@@ -245,29 +246,55 @@ class EdisonDiffusion(L.LightningModule):
         self.autoencoder = autoencoder
         self.autoencoder.freeze()
         
-        self.project_to_position = self.get_position_layer()
+        self.project_embedding_to_position = self._get_position_layer()
+        self.project_embedding_to_conscious = self._get_conscious_layer()
         self.diffusion_model = EdisonGaussianDiffusion(config=config)
         
-    def get_position_layer(self):
+    def _get_position_layer(self):
         return torch.nn.Sequential(
-            SinusoidalPosEmb(self.config.embedding_latent_dim),
-            nn.Linear(self.config.embedding_latent_dim, self.config.context_latent_dim),
+            SinusoidalPosEmb(self.config.lm_dim),
+            nn.Linear(self.config.lm_dim, self.config.lm_dim * self.config.feedforward_mult),
             nn.GELU(),
-            nn.Linear(self.config.context_latent_dim, self.config.context_latent_dim),
+            nn.Linear(self.config.lm_dim * self.config.feedforward_mult, self.config.lm_dim),
         )
     
+    def _get_conscious_layer(self):
+        return ConsciousnessEmbedding(
+            dim=self.config.lm_dim,
+            num_flag=2,
+        )
+    
+    def _get_xt_data(self, latents, attention_mask):
+        position_input = torch.arange(latents.shape[1], device=latents.device)
+        position_input = position_input.unsqueeze(0).expand(latents.shape[0], -1)
+        position = self.project_embedding_to_position(position_input)
+        conscious = self.project_embedding_to_conscious(attention_mask=attention_mask)
+        # print(f"latents: {latents.shape}, position: {position.shape}, conscious: {conscious.shape}")
+        return {
+            'words':latents,
+            'position':position,
+            'conscious':conscious,
+        }
+        
+    
     def forward(self, embedding_latents, context_latents, attention_mask, class_id=None):
+        # TODO: implement latents_c0 process
+        if self.config.use_latents_c0:
+            NotImplementedError('latents_c0 not implemented')
+        context_latents = context_latents['latents_c1']
+        
+        embedding_latents = self._get_xt_data(embedding_latents, attention_mask)
         latents = self.diffusion_model(
-            txt_latent=context_latents,
+            embedding_latents=embedding_latents,
+            context_latents=context_latents,
             mask=attention_mask,
             class_id=class_id,
-            seq2seq_cond=embedding_latents,
-            seq2seq_cond_mask=attention_mask,
+            context_latents_mask=attention_mask,
         )
         return latents
         
     def training_step(self, batch, batch_idx):
-        print(batch)
+        # print(batch)
         inputs = batch['input_ids']
         attention_mask = batch['attention_mask']
         class_id = batch['label'] if 'label' in batch else None

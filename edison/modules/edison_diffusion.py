@@ -54,18 +54,18 @@ class DiffusionTransformer(nn.Module):
         self.time_mlp = self._build_time_mlp(tx_dim)
         self.time_pos_embed_mlp = nn.Sequential(nn.GELU(), nn.Linear(tx_dim * 4, tx_dim))
         self.pos_emb = AbsolutePositionalEmbedding(tx_dim, max_seq_len)
-        self.encoder = self._build_encoder(tx_dim, tx_depth, heads)
+        self.encoder = self._build_encoder(tx_dim, latent_dim, tx_depth, heads)
 
         self.class_embedding = self._build_class_embedding(tx_dim, num_classes, class_conditional)
         self.null_embedding_seq2seq, self.seq2seq_proj = self._build_seq2seq(seq2seq, seq2seq_context_dim, tx_dim)
 
-        self.input_proj = nn.Linear(latent_dim * 2 if self_condition else latent_dim, tx_dim)
-        self.init_self_cond = nn.Parameter(torch.randn(1, latent_dim)) if self_condition else None
+        self.input_proj = nn.Linear(tx_dim * 2 if self_condition else tx_dim, tx_dim)
+        self.init_self_cond = nn.Parameter(torch.randn(1, tx_dim)) if self_condition else None
         if self_condition:
             nn.init.normal_(self.init_self_cond, std=0.02)
 
         self.norm = nn.LayerNorm(tx_dim)
-        self.output_proj = nn.Linear(tx_dim * 2 if dense_output_connection else tx_dim, latent_dim * 2 if dual_output else latent_dim)
+        self.output_proj = nn.Linear(tx_dim * 2 if dense_output_connection else tx_dim, tx_dim * 2 if dual_output else tx_dim)
 
         init_zero_(self.output_proj)
 
@@ -79,9 +79,10 @@ class DiffusionTransformer(nn.Module):
             nn.Linear(time_emb_dim, time_emb_dim)
         )
 
-    def _build_encoder(self, tx_dim, tx_depth, heads):
+    def _build_encoder(self, tx_dim, latent_dim, tx_depth, heads):
         return Encoder(
             dim=tx_dim,
+            cross_dim=latent_dim,
             depth=tx_depth,
             num_heads=heads,
         )
@@ -99,7 +100,17 @@ class DiffusionTransformer(nn.Module):
             return null_embedding_seq2seq, seq2seq_proj
         return None, None
 
-    def forward(self, x, mask, time, x_self_cond=None, class_id=None, seq2seq_cond=None, seq2seq_mask=None):
+    def forward(
+        self,
+        embedding_latents,
+        mask,
+        time,
+        embedding_self_cond=None,
+        class_id=None,
+        context_latents=None,
+        context_latents_mask=None,
+    ):
+        z_t = embedding_latents['words']
         time_emb = self.time_mlp(time * 1000)
         time_emb = rearrange(time_emb, 'b d -> b 1 d')
 
@@ -108,24 +119,25 @@ class DiffusionTransformer(nn.Module):
             class_emb = rearrange(class_emb, 'b d -> b 1 d')
             time_emb = time_emb + class_emb
 
-        pos_emb = self.pos_emb(x)
+        pos_emb = self.pos_emb(z_t)
 
         if self.self_condition:
-            x = torch.cat((x, x_self_cond if x_self_cond is not None else repeat(self.init_self_cond, '1 d -> b l d', b=x.shape[0], l=x.shape[1])), dim=-1)
+            z_t = torch.cat((z_t, embedding_self_cond if embedding_self_cond is not None else repeat(self.init_self_cond, '1 d -> b l d', b=z_t.shape[0], l=z_t.shape[1])), dim=-1)
 
-        x_input = self.input_proj(x)
+        x_input = self.input_proj(z_t)
         tx_input = x_input + pos_emb + self.time_pos_embed_mlp(time_emb)
+        embedding_latents['tx_input'] = tx_input
 
-        if self.seq2seq:
-            context, context_mask = self._build_context(seq2seq_cond, seq2seq_mask, x.shape[0], x.device)
-            x = self.encoder(tx_input, mask=mask, context=context, context_mask=context_mask, time_emb=time_emb)
-        else:
-            x = self.encoder(tx_input, mask=mask, time_emb=time_emb)
+        # context, context_mask = self._build_context(embedding_latents, embedding_latents_mask, z_t.shape[0], z_t.device)
+        z_t = self.encoder(embedding_latents, cross_kv=context_latents, time_emb=time_emb)
 
-        x = self.norm(x)
-        return self.output_proj(x)
+        z_t = self.norm(z_t)
+        z_t = self.output_proj(z_t)
+        embedding_latents['model_output'] = z_t
+        
+        return embedding_latents, context_latents
 
-    def _build_context(self, seq2seq_cond, seq2seq_mask, batch_size, device):
+    def _build_context(self, seq2seq_cond, seq2seq_cond_mask, batch_size, device):
         context, context_mask = [], []
         if seq2seq_cond is None:
             null_context = repeat(self.null_embedding_seq2seq.weight, '1 d -> b 1 d', b=batch_size)
@@ -133,7 +145,7 @@ class DiffusionTransformer(nn.Module):
             context_mask.append(torch.tensor([[True] for _ in range(batch_size)], dtype=bool, device=device))
         else:
             context.append(self.seq2seq_proj(seq2seq_cond))
-            context_mask.append(seq2seq_mask)
+            context_mask.append(seq2seq_cond_mask)
         context = torch.cat(context, dim=1)
         context_mask = torch.cat(context_mask, dim=1)
         return context, context_mask
@@ -145,12 +157,13 @@ class DiffusionTransformer(nn.Module):
 class EdisonGaussianDiffusion(nn.Module):
     def __init__(self, config:Config):
         super().__init__()
+        self.config = config
         self.diffusion_model = self._initialize_diffusion_model(config)
         self._initialize_buffers(config)
         self._initialize_schedules(config)
-        self.latent_dim = self.diffusion_model.latent_dim
+        self.latent_dim = config.latent_dim
         self.self_condition = self.diffusion_model.self_condition
-        self.max_seq_len = config.num_encoder_latents
+        self.max_seq_len = config.max_seq_len
         self.l2_normalize = False
         self.loss_type = config.loss_type
         self.objective = config.objective
@@ -163,7 +176,7 @@ class EdisonGaussianDiffusion(nn.Module):
             tx_depth=config.tx_depth,
             heads=config.tx_dim // config.attn_head_dim,
             latent_dim=config.latent_dim,
-            max_seq_len=config.num_encoder_latents,
+            max_seq_len=config.max_seq_len,
             self_condition=config.self_condition,
             scale_shift=config.scale_shift,
             dropout=config.dropout,
@@ -175,11 +188,11 @@ class EdisonGaussianDiffusion(nn.Module):
             num_dense_connections=config.num_dense_connections
         )
 
-    def _initialize_buffers(self, config):
-        self.register_buffer('latent_mean', torch.zeros(self.latent_dim, dtype=torch.float32))
+    def _initialize_buffers(self, config:Config):
+        self.register_buffer('latent_mean', torch.zeros(config.latent_dim, dtype=torch.float32))
         self.register_buffer('latent_scale', torch.tensor(1, dtype=torch.float32))
 
-    def _initialize_schedules(self, config):
+    def _initialize_schedules(self, config:Config):
         self.train_schedule = partial(time_to_alpha, alpha_schedule=cosine_schedule, scale=config.scale)
         self.sampling_schedule = partial(time_to_alpha, alpha_schedule=cosine_schedule, scale=config.scale)
         self.sampling_timesteps = config.sampling_timesteps
@@ -208,37 +221,38 @@ class EdisonGaussianDiffusion(nn.Module):
 
     def diffusion_model_predictions(
         self,
-        z_t,
+        embedding_latents,
         mask,
         t,
-        x_self_cond=None,
+        embedding_self_cond=None,
         class_id=None,
-        seq2seq_cond=None,
-        seq2seq_mask=None,
+        context_latents=None,
+        context_latents_mask=None,
         sampling=False,
         cls_free_guidance=1.0,
-        l2_normalize=False
+        l2_normalize=False,
     ):
         time_to_alpha = self.sampling_schedule if sampling else self.train_schedule
         time_cond = time_to_alpha(t)
-        model_output = self.diffusion_model(
-            z_t,
+        embedding_latents, context_latents = self.diffusion_model(
+            embedding_latents,
             mask,
             time_cond,
-            x_self_cond,
+            embedding_self_cond,
             class_id=class_id,
-            seq2seq_cond=seq2seq_cond,
-            seq2seq_mask=seq2seq_mask
+            context_latents=context_latents,
+            context_latents_mask=context_latents_mask
         )
-        if cls_free_guidance != 1.0:
-            unc_class_id = torch.full_like(class_id, fill_value=self.diffusion_model.num_classes) if class_id is not None else None
-            unc_model_output = self.diffusion_model(z_t, mask, time_cond, x_self_cond, class_id=unc_class_id)
-            model_output = model_output * cls_free_guidance + unc_model_output * (1 - cls_free_guidance)
-        return self._process_model_output(z_t, t, model_output, sampling, l2_normalize)
+        # if cls_free_guidance != 1.0:
+        #     unc_class_id = torch.full_like(class_id, fill_value=self.diffusion_model.num_classes) if class_id is not None else None
+        #     unc_model_output = self.diffusion_model(context_latents, mask, time_cond, context_self_cond, class_id=unc_class_id)
+        #     model_output = model_output * cls_free_guidance + unc_model_output * (1 - cls_free_guidance)
+        return self._process_model_output(embedding_latents['words'], t, embedding_latents['model_output'], sampling, l2_normalize)
 
     def _process_model_output(self, z_t, t, model_output, sampling, l2_normalize):
         x_start = self.predict_start_from_v(z_t, t, model_output, sampling=sampling)
         pred_noise = self.predict_noise_from_v(z_t, t, model_output, sampling=sampling)
+        pred_v = model_output
         if l2_normalize and sampling:
             x_start = F.normalize(x_start, dim=-1) * math.sqrt(x_start.shape[-1])
             pred_noise = self.predict_noise_from_start(z_t, t, x_start, sampling=sampling)
@@ -254,7 +268,7 @@ class EdisonGaussianDiffusion(nn.Module):
         return times.unbind(dim=-1)
 
     @torch.no_grad()
-    def ddpm_sample(self, shape, lengths, class_id, seq2seq_cond, seq2seq_mask, cls_free_guidance=1.0, l2_normalize=False, invert=False, z_t=None):
+    def ddpm_sample(self, shape, lengths, class_id, seq2seq_cond, seq2seq_cond_mask, cls_free_guidance=1.0, l2_normalize=False, invert=False, z_t=None):
         batch, device = shape[0], next(self.diffusion_model.parameters()).device
         time_pairs = self.get_sampling_timesteps(batch, device, invert)
         z_t = torch.randn(shape, device=device) if z_t is None else z_t
@@ -262,8 +276,8 @@ class EdisonGaussianDiffusion(nn.Module):
 
         for time, time_next in tqdm(time_pairs, desc='sampling loop time step', total=self.sampling_timesteps):
             model_output = self.diffusion_model_predictions(
-                z_t, mask, time, class_id=class_id, x_self_cond=x_start,
-                seq2seq_cond=seq2seq_cond, seq2seq_mask=seq2seq_mask,
+                z_t, mask, time, class_id=class_id, embedding_self_cond=x_start,
+                context_latents=seq2seq_cond, context_latents_mask=seq2seq_cond_mask,
                 sampling=True, cls_free_guidance=cls_free_guidance, l2_normalize=l2_normalize
                 )
             alpha, alpha_next = self._get_alpha(time, True), self._get_alpha(time_next, True)
@@ -281,8 +295,8 @@ class EdisonGaussianDiffusion(nn.Module):
         return z_t, mask
 
     @torch.no_grad()
-    def sample(self, batch_size, length, class_id=None, seq2seq_cond=None, seq2seq_mask=None, cls_free_guidance=1.0, l2_normalize=False):
-        return self.ddpm_sample((batch_size, self.max_seq_len, self.latent_dim), length, class_id, seq2seq_cond, seq2seq_mask, cls_free_guidance, l2_normalize)
+    def sample(self, batch_size, length, class_id=None, seq2seq_cond=None, seq2seq_cond_mask=None, cls_free_guidance=1.0, l2_normalize=False):
+        return self.ddpm_sample((batch_size, self.max_seq_len, self.latent_dim), length, class_id, seq2seq_cond, seq2seq_cond_mask, cls_free_guidance, l2_normalize)
 
     @property
     def loss_fn(self):
@@ -292,42 +306,46 @@ class EdisonGaussianDiffusion(nn.Module):
         else:
             raise ValueError(f'Invalid loss type {self.loss_type}')
 
-    def forward(self, txt_latent, mask, class_id, seq2seq_cond, seq2seq_mask):
+    def forward(self, embedding_latents, context_latents, mask, class_id, context_latents_mask):
+        # print(f"txt_latent type: {type(txt_latent)}, mask type: {type(mask)}, class_id type: {type(class_id)}, seq2seq_cond type: {type(seq2seq_cond)}, seq2seq_cond_mask type: {type(seq2seq_cond_mask)}")
+        # print(f"txt_latent keys: {txt_latent.keys()}")
+        txt_latent = embedding_latents['words']
         batch, l, d = txt_latent.shape
         assert l == self.max_seq_len, f'length must be {self.max_seq_len}'
-        times = torch.zeros((batch,)).uniform_(0, 1.)
-        noise = torch.randn_like(txt_latent)
+        times = torch.zeros((batch,)).uniform_(0, 1.).to(txt_latent.device)
+        noise = torch.randn_like(txt_latent).to(txt_latent.device)
         alpha = self.train_schedule(times)
         alpha = right_pad_dims_to(txt_latent, alpha)
         z_t = alpha.sqrt() * txt_latent + (1 - alpha).sqrt() * noise
+        embedding_latents['words'] = z_t
 
         if self.diffusion_model.class_conditional and self.diffusion_model.class_unconditional_prob > 0:
             assert class_id is not None
             class_unconditional_mask = self.class_unconditional_bernoulli.sample(class_id.shape).bool()
             class_id[class_unconditional_mask] = self.diffusion_model.num_classes
 
+        embedding_self_cond = None
         if self.self_condition and (random.random() < self.train_prob_self_cond):
             with torch.no_grad():
                 model_output = self.diffusion_model_predictions(
-                    z_t,
+                    embedding_latents,
                     mask,
                     times,
                     class_id=class_id,
-                    seq2seq_cond=seq2seq_cond,
-                    seq2seq_mask=seq2seq_mask
+                    context_latents=context_latents,
+                    context_latents_mask=context_latents_mask,
                 )
-                self_cond = model_output.pred_x_start.detach()
+                embedding_self_cond = model_output.pred_x_start.detach()
                 if self.l2_normalize:
-                    self_cond = F.normalize(self_cond, dim=-1) * math.sqrt(self_cond.shape[-1])
-
+                    embedding_self_cond = F.normalize(embedding_self_cond, dim=-1) * math.sqrt(embedding_self_cond.shape[-1])
         predictions = self.diffusion_model_predictions(
-            z_t,
+            embedding_latents,
             mask,
             times,
-            x_self_cond=self_cond,
+            embedding_self_cond=embedding_self_cond,
             class_id=class_id,
-            seq2seq_cond=seq2seq_cond,
-            seq2seq_mask=seq2seq_mask
+            context_latents=context_latents,
+            context_latents_mask=context_latents_mask,
         )
         target = alpha.sqrt() * noise - (1 - alpha).sqrt() * txt_latent
         pred = predictions.pred_v

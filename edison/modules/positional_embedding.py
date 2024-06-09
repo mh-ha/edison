@@ -33,6 +33,23 @@ class AbsolutePositionalEmbedding(nn.Module):
         pos_emb = pos_emb * self.scale
         return l2norm(pos_emb) if self.l2norm_embed else pos_emb
 
+class ConsciousnessEmbedding(nn.Module):
+    def __init__(self, dim, num_flag, l2norm_embed = False):
+        super().__init__()
+        self.scale = dim ** -0.5 if not l2norm_embed else 1.
+        self.l2norm_embed = l2norm_embed
+        self.emb = nn.Embedding(num_flag, dim)
+
+    def forward(self, attention_mask:torch.Tensor):
+        emb = self.emb.weight
+        emb_1 = attention_mask.unsqueeze(-1) * emb[1].unsqueeze(0)
+        # print(emb_1)
+        emb_0 = (~attention_mask.bool()).long().unsqueeze(-1) * emb[0].unsqueeze(0)
+        # print(emb_0)
+        emb = emb_1 + emb_0
+        emb = emb * self.scale
+        return l2norm(emb) if self.l2norm_embed else emb
+
 
 class RelativePositionEmbedding(nn.Module):
     def __init__(
@@ -136,14 +153,12 @@ class SinusoidalPosEmb(nn.Module):
         super().__init__()
         self.dim = dim
 
-    def forward(self, x):
+    def forward(self, x: torch.Tensor):
         device = x.device
         half_dim = self.dim // 2
         emb = math.log(10000) / (half_dim - 1)
         emb = torch.exp(torch.arange(half_dim, device=device) * -emb)
-        print(f"######in SinusoidalPosEmb-before / emb.shape: {emb.shape}, x.shape: {x.shape}")
-        emb = x[:, None] * emb[None, :]
-        print(f"######in SinusoidalPosEmb-after / emb.shape: {emb.shape}, x.shape: {x.shape}")
+        emb = x.unsqueeze(-1) * emb.unsqueeze(0)
         emb = torch.cat((emb.sin(), emb.cos()), dim=-1)
         return emb
 

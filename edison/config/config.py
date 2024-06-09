@@ -76,7 +76,7 @@ class Config:
     l2_normalize_latents:bool = True
     encoding_mode:str = 'sentence_only'  # 'sentence_only', 'both_separately', 'both_together'
     #############################
-    # Edison context Diffusion
+    # Edison Diffusion
     pretrained_ae_path:str = ''
     sampling_timesteps:int = 250
     loss_type:str = 'l2'
@@ -96,6 +96,8 @@ class Config:
     self_condition:bool = True
     scale_shift:bool = True
     num_dense_connections:int = 3
+    feedforward_mult:int = 4
+    use_latents_c0:bool = False
     # #############################
     # # Edison embedding Diffusion
     # embedding_pretrained_ae_path:str = ''
