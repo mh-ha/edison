@@ -32,10 +32,7 @@ class XTAttention(nn.Module):
     
     # option 1
     def forward(self, words, position, conscious, cross_kv=None):
-        if cross_kv is None:
-            words_kv = words
-        else:
-            words_kv = cross_kv
+        words_kv = words if cross_kv is None else cross_kv
         h = self.num_heads
         
         q_words = rearrange(self.words_to_q(words), 'b n (h d) -> b h n d', h = h)
@@ -115,6 +112,41 @@ class XTAttention(nn.Module):
         return self.to_out(out)
 
 
+class Attention(nn.Module):
+    def __init__(
+        self,
+        dim,
+        cross_dim = None,
+        num_heads = 8
+    ):
+        super().__init__()
+        self.dim = dim
+        self.num_heads = num_heads
+        self.head_dim = dim // num_heads
+        assert self.head_dim * num_heads == dim, 'dim must be divisible by num_heads'
+        self.scale = self.head_dim ** -0.5
+        
+        self.words_to_q = nn.Linear(self.dim, self.head_dim*self.num_heads, bias = False)
+        self.words_to_k = nn.Linear(self.dim if cross_dim == None else cross_dim, self.head_dim*self.num_heads, bias = False)
+        self.words_to_v = nn.Linear(self.dim if cross_dim == None else cross_dim, self.head_dim*self.num_heads, bias = False)
+        
+        self.to_out = nn.Linear(self.head_dim*self.num_heads, self.dim)
+    
+    def forward(self, words, cross_kv=None):
+        words_kv = words if cross_kv is None else cross_kv
+        h = self.num_heads
+        q = rearrange(self.words_to_q(words), 'b n (h d) -> b h n d', h = h)
+        k = rearrange(self.words_to_k(words_kv), 'b n (h d) -> b h n d', h = h)
+        v = rearrange(self.words_to_v(words_kv), 'b n (h d) -> b h n d', h = h)
+        
+        sim = einsum('b h i d, b h j d -> b h i j', q, k) * self.scale
+        attn = sim.softmax(dim=-1)
+        
+        out = einsum('b h i j, b h j d -> b h i d', attn, v)
+        out = rearrange(out, 'b h n d -> b n (h d)')
+        return self.to_out(out)
+
+
 class FeedForward(nn.Module):
     def __init__(self, dim, ff_mult=4, dropout=0.):
         super().__init__()
@@ -190,6 +222,41 @@ class Encoder(nn.Module):
             words = cross_attn_residual(words, residual)
             residual = words
             words = self_attn(norm2(words), position, conscious)
+            words = self_attn_residual(words, residual)
+            residual = words
+            words = ff(norm3(words))
+            words = ff_residual(words, residual, time_emb)
+        return words
+
+
+class ContextEncoder(nn.Module):
+    def __init__(self, dim, cross_dim, depth, num_heads=8, ff_mult=4):
+        super().__init__()
+        self.dim = dim
+        self.ff_mult = ff_mult
+        self.layers = nn.ModuleList()
+        for _ in range(depth):
+            self.layers.append(
+                nn.ModuleList([
+                    nn.LayerNorm(dim),
+                    Attention(dim, cross_dim, num_heads=num_heads),
+                    GRUGating(dim),
+                    nn.LayerNorm(dim),
+                    Attention(dim, num_heads=num_heads),
+                    GRUGating(dim),
+                    nn.LayerNorm(dim),
+                    FeedForward(dim, ff_mult),
+                    TimeConditionedResidual(dim*ff_mult, dim),
+                ])
+            )
+
+    def forward(self, words, cross_kv, attention_mask=None, time_emb=None):
+        for norm1, cross_attn, cross_attn_residual, norm2, self_attn, self_attn_residual, norm3, ff, ff_residual in self.layers:
+            residual = words
+            words = cross_attn(norm1(words), cross_kv)
+            words = cross_attn_residual(words, residual)
+            residual = words
+            words = self_attn(norm2(words))
             words = self_attn_residual(words, residual)
             residual = words
             words = ff(norm3(words))

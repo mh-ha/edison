@@ -256,14 +256,14 @@ class EdisonDiffusion(L.LightningModule):
         context_latents = context_latents['latents_c1']
         
         # embedding_latents = self._get_xt_data(embedding_latents, attention_mask)
-        latents = self.diffusion_model(
+        loss = self.diffusion_model(
             embedding_latents=embedding_latents,
             context_latents=context_latents,
             embedding_latents_mask=attention_mask,
             class_id=class_id,
             context_latents_mask=attention_mask,
         )
-        return latents
+        return loss
         
     def training_step(self, batch, batch_idx):
         # print(batch)

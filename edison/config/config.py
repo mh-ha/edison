@@ -97,6 +97,7 @@ class Config:
     scale_shift:bool = True
     num_dense_connections:int = 3
     feedforward_mult:int = 4
+    time_difference_embedding_over_context:int = 2
     use_latents_c0:bool = False
     # #############################
     # # Edison embedding Diffusion

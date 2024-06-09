@@ -11,7 +11,7 @@ from tqdm.auto import tqdm
 
 from edison.config.config import Config
 from .positional_embedding import AbsolutePositionalEmbedding
-from .edison_diffusion_layer import Encoder
+from .edison_diffusion_layer import Encoder, ContextEncoder
 from .utils import time_to_alpha, cosine_schedule, right_pad_dims_to, init_zero_
 
 
@@ -37,8 +37,9 @@ class DiffusionTransformer(nn.Module):
         self, tx_dim, tx_depth, heads, latent_dim=None, max_seq_len=64, self_condition=False, 
         dropout=0.1, scale_shift=False, class_conditional=False, num_classes=0, 
         class_unconditional_prob=0, seq2seq=False, seq2seq_context_dim=0, 
-        dual_output=False, num_dense_connections=0, dense_output_connection=False
-        ):
+        dual_output=False, num_dense_connections=0, dense_output_connection=False,
+        is_context_diffusion=False,
+    ):
         super().__init__()
 
         self.latent_dim = latent_dim
@@ -55,7 +56,7 @@ class DiffusionTransformer(nn.Module):
         self.time_mlp = self._build_time_mlp(tx_dim)
         self.time_pos_embed_mlp = nn.Sequential(nn.GELU(), nn.Linear(tx_dim * 4, tx_dim))
         self.pos_emb = AbsolutePositionalEmbedding(tx_dim, max_seq_len)
-        self.encoder = self._build_encoder(tx_dim, latent_dim, tx_depth, heads)
+        self.encoder = self._build_encoder(tx_dim, latent_dim, tx_depth, heads, is_context_diffusion)
 
         self.class_embedding = self._build_class_embedding(tx_dim, num_classes, class_conditional)
         self.null_embedding_seq2seq, self.seq2seq_proj = self._build_seq2seq(seq2seq, seq2seq_context_dim, tx_dim)
@@ -80,13 +81,21 @@ class DiffusionTransformer(nn.Module):
             nn.Linear(time_emb_dim, time_emb_dim)
         )
 
-    def _build_encoder(self, tx_dim, latent_dim, tx_depth, heads):
-        return Encoder(
-            dim=tx_dim,
-            cross_dim=latent_dim,
-            depth=tx_depth,
-            num_heads=heads,
-        )
+    def _build_encoder(self, tx_dim, latent_dim, tx_depth, heads, is_context_diffusion):
+        if is_context_diffusion:
+            return ContextEncoder(
+                dim=tx_dim,
+                cross_dim=latent_dim,
+                depth=tx_depth,
+                num_heads=heads,
+            )
+        else:
+            return Encoder(
+                dim=tx_dim,
+                cross_dim=latent_dim,
+                depth=tx_depth,
+                num_heads=heads,
+            )
 
     def _build_class_embedding(self, tx_dim, num_classes, class_conditional):
         if class_conditional:
@@ -187,12 +196,13 @@ class EdisonGaussianDiffusion(nn.Module):
             seq2seq=(config.dataset_name in {'xsum', 'qqp', 'qg', 'wmt14-de-en', 'wmt14-en-de'}),
             seq2seq_context_dim=config.lm_dim,
             num_dense_connections=config.num_dense_connections,
+            is_context_diffusion=False,
         )
         self.context_diffusion_model = DiffusionTransformer(
-            tx_dim=config.tx_dim,
+            tx_dim=config.latent_dim,
             tx_depth=config.tx_depth,
-            heads=config.tx_dim // config.attn_head_dim,
-            latent_dim=config.latent_dim,
+            heads=config.latent_dim // config.attn_head_dim,
+            latent_dim=config.tx_dim,
             max_seq_len=config.max_seq_len,
             self_condition=config.self_condition,
             scale_shift=config.scale_shift,
@@ -203,6 +213,7 @@ class EdisonGaussianDiffusion(nn.Module):
             seq2seq=(config.dataset_name in {'xsum', 'qqp', 'qg', 'wmt14-de-en', 'wmt14-en-de'}),
             seq2seq_context_dim=config.lm_dim,
             num_dense_connections=config.num_dense_connections,
+            is_context_diffusion=True,
         )
         
 
@@ -324,13 +335,52 @@ class EdisonGaussianDiffusion(nn.Module):
         else:
             raise ValueError(f'Invalid loss type {self.loss_type}')
 
-    def forward(self, embedding_latents, context_latents, embedding_latents_mask, class_id, context_latents_mask):
-        # print(f"txt_latent type: {type(txt_latent)}, mask type: {type(mask)}, class_id type: {type(class_id)}, seq2seq_cond type: {type(seq2seq_cond)}, seq2seq_cond_mask type: {type(seq2seq_cond_mask)}")
-        # print(f"txt_latent keys: {txt_latent.keys()}")
+    def context_forward(self, embedding_latents, context_latents, embedding_latents_mask, class_id, context_latents_mask, times):
+        txt_latent = context_latents
+        noise = torch.randn_like(txt_latent).to(txt_latent.device)
+        alpha = self.train_schedule(times)
+        alpha = right_pad_dims_to(txt_latent, alpha)
+        # print(alpha.shape, txt_latent.shape, noise.shape)
+        z_t = alpha.sqrt() * txt_latent + (1 - alpha).sqrt() * noise
+        context_latents = z_t
+
+        if self.context_diffusion_model.class_conditional and self.context_diffusion_model.class_unconditional_prob > 0:
+            assert class_id is not None
+            class_unconditional_mask = self.class_unconditional_bernoulli.sample(class_id.shape).bool()
+            class_id[class_unconditional_mask] = self.context_diffusion_model.num_classes
+        context_self_cond = None
+        if self.self_condition and (random.random() < self.train_prob_self_cond):
+            with torch.no_grad():
+                model_output = self.diffusion_model_predictions(
+                    context_latents,
+                    context_latents_mask,
+                    times,
+                    class_id=class_id,
+                    sub_latents=embedding_latents,
+                    sub_latents_mask=embedding_latents_mask,
+                    diffusion_model=self.context_diffusion_model,
+                )
+                context_self_cond = model_output.pred_x_start.detach()
+                if self.l2_normalize:
+                    context_self_cond = F.normalize(context_self_cond, dim=-1) * math.sqrt(context_self_cond.shape[-1])
+        predictions = self.diffusion_model_predictions(
+            context_latents,
+            context_latents_mask,
+            times,
+            main_self_cond=context_self_cond,
+            class_id=class_id,
+            sub_latents=embedding_latents,
+            sub_latents_mask=embedding_latents_mask,
+            diffusion_model=self.context_diffusion_model,
+        )
+        target = alpha.sqrt() * noise - (1 - alpha).sqrt() * txt_latent
+        pred = predictions.pred_v
+        loss = self.loss_fn(pred, target, reduction='none')
+        loss = rearrange([reduce(loss[i][:torch.sum(context_latents_mask[i])], 'l d -> 1', 'mean') for i in range(txt_latent.shape[0])], 'b 1 -> b 1')
+        return loss.mean()
+
+    def embedding_forward(self, embedding_latents, context_latents, embedding_latents_mask, class_id, context_latents_mask, times):
         txt_latent = embedding_latents
-        batch, l, d = txt_latent.shape
-        assert l == self.max_seq_len, f'length must be {self.max_seq_len}'
-        times = torch.zeros((batch,)).uniform_(0, 1.).to(txt_latent.device)
         noise = torch.randn_like(txt_latent).to(txt_latent.device)
         alpha = self.train_schedule(times)
         alpha = right_pad_dims_to(txt_latent, alpha)
@@ -379,3 +429,11 @@ class EdisonGaussianDiffusion(nn.Module):
         else:
             mask = [[True] * length + [False] * (self.max_seq_len - length) for length in lengths]
             return torch.tensor(mask, dtype=torch.bool, device=device)
+
+    def forward(self, embedding_latents, context_latents, embedding_latents_mask, class_id, context_latents_mask):
+        embedding_times = torch.zeros((embedding_latents.shape[0],)).uniform_(0, 1.).to(embedding_latents.device)
+        context_times = torch.clamp(embedding_times * self.config.time_difference_embedding_over_context, 0, 1)
+        loss_context = self.context_forward(embedding_latents, context_latents, embedding_latents_mask, class_id, context_latents_mask, context_times)
+        loss_embedding = self.embedding_forward(embedding_latents, context_latents, embedding_latents_mask, class_id, context_latents_mask, embedding_times)
+        loss = loss_context + loss_embedding
+        return loss
