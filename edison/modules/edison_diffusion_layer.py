@@ -3,7 +3,7 @@ from torch import nn, einsum
 from einops import rearrange, repeat
 
 from .residual import TimeConditionedResidual, GRUGating
-from .positional_embedding import SinusoidalPosEmb, ConsciousnessEmbedding
+from .positional_embedding import SinusoidalPosEmb, ConsciousnessEmbedding, RelativePositionEmbedding
 
 
 class XTAttention(nn.Module):
@@ -25,44 +25,51 @@ class XTAttention(nn.Module):
         self.words_to_v = nn.Linear(self.dim if cross_dim is None else cross_dim, self.head_dim*self.num_heads, bias = False)
         self.position_to_q = nn.Linear(self.dim, self.head_dim*self.num_heads, bias = False)
         self.position_to_k = nn.Linear(self.dim, self.head_dim*self.num_heads, bias = False)
+        # self.position_to_k = nn.Linear(self.dim if cross_dim is None else cross_dim, self.head_dim*self.num_heads, bias = False)
         self.conscious_to_q = nn.Linear(self.dim, self.head_dim*self.num_heads, bias = False)
         self.conscious_to_k = nn.Linear(self.dim, self.head_dim*self.num_heads, bias = False)
+        # self.conscious_to_k = nn.Linear(self.dim if cross_dim is None else cross_dim, self.head_dim*self.num_heads, bias = False)
         
         self.to_out = nn.Linear(self.head_dim*self.num_heads, self.dim)
     
     # option 1
-    def forward(self, words, position, conscious, cross_kv=None):
-        words_kv = words if cross_kv is None else cross_kv
+    def forward(self, words, position_words, conscious_words, cross_kv=None, position_cross=None, conscious_cross=None):
         h = self.num_heads
-        
+        # print(f"words: {words.shape}, position_words: {position_words.shape}, conscious_words: {conscious_words.shape}")
+        # print(f"cross_kv: {cross_kv.shape}, position_cross: {position_cross.shape}, conscious_cross: {conscious_cross.shape}")
+        # print(f"words_to_q: {self.words_to_q}, words_to_k: {self.words_to_k}, words_to_v: {self.words_to_v}")
+        # print(f"position_to_q: {self.position_to_q}, position_to_k: {self.position_to_k}")
+        # print(f"conscious_to_q: {self.conscious_to_q}, conscious_to_k: {self.conscious_to_k}")
         q_words = rearrange(self.words_to_q(words), 'b n (h d) -> b h n d', h = h)
-        k_words = rearrange(self.words_to_k(words_kv), 'b n (h d) -> b h n d', h = h)
-        v_words = rearrange(self.words_to_v(words_kv), 'b n (h d) -> b h n d', h = h)
+        k_words = rearrange(self.words_to_k(cross_kv), 'b n (h d) -> b h n d', h = h)
+        v_words = rearrange(self.words_to_v(cross_kv), 'b n (h d) -> b h n d', h = h)
         
-        q_position = rearrange(self.position_to_q(position), 'b n (h d) -> b h n d', h = h)
-        k_position = rearrange(self.position_to_k(position), 'b n (h d) -> b h n d', h = h)
+        q_position = rearrange(self.position_to_q(position_words), 'b n (h d) -> b h n d', h = h)
+        k_position = rearrange(self.position_to_k(position_cross), 'b n (h d) -> b h n d', h = h)
         
-        q_conscious = rearrange(self.conscious_to_q(conscious), 'b n (h d) -> b h n d', h = h)
-        k_conscious = rearrange(self.conscious_to_k(conscious), 'b n (h d) -> b h n d', h = h)
-        
+        q_conscious = rearrange(self.conscious_to_q(conscious_words), 'b n (h d) -> b h n d', h = h)
+        k_conscious = rearrange(self.conscious_to_k(conscious_cross), 'b n (h d) -> b h n d', h = h)
+        # print(f"q_words: {q_words.shape}, k_words: {k_words.shape}, v_words: {v_words.shape}")
+        # print(f"q_position: {q_position.shape}, k_position: {k_position.shape}")
+        # print(f"q_conscious: {q_conscious.shape}, k_conscious: {k_conscious.shape}")
         q_list = [q_words, q_position, q_conscious]
-        if cross_kv == None:
-            k_list = [k_words, k_position, k_conscious]
-            for q, k in zip(q_list, k_list):
-                sim = einsum('b h i d, b h j d -> b h i j', q, k) * self.scale
-                try:
-                    sim_all = sim_all + sim
-                except:
-                    sim_all = sim
-            attn = sim_all.softmax(dim=-1)
-        else:
-            for q in q_list:
-                sim = einsum('b h i d, b h j d -> b h i j', q, k_words) * self.scale
-                try:
-                    sim_all = sim_all + sim
-                except:
-                    sim_all = sim
-            attn = sim_all.softmax(dim=-1)
+        # if cross_kv == None:
+        k_list = [k_words, k_position, k_conscious]
+        for q, k in zip(q_list, k_list):
+            sim = einsum('b h i d, b h j d -> b h i j', q, k) * self.scale
+            try:
+                sim_all = sim_all + sim
+            except:
+                sim_all = sim
+        attn = sim_all.softmax(dim=-1)
+        # else:
+        #     for q in q_list:
+        #         sim = einsum('b h i d, b h j d -> b h i j', q, k_words) * self.scale
+        #         try:
+        #             sim_all = sim_all + sim
+        #         except:
+        #             sim_all = sim
+        #     attn = sim_all.softmax(dim=-1)
         
         out = einsum('b h i j, b h j d -> b h i d', attn, v_words)
         out = rearrange(out, 'b h n d -> b n (h d)')
@@ -164,12 +171,13 @@ class FeedForward(nn.Module):
 
 
 class Encoder(nn.Module):
-    def __init__(self, dim, cross_dim, depth, num_heads=8, ff_mult=4):
+    def __init__(self, dim, cross_dim, depth, num_heads=8, ff_mult=4, max_seq_len=64, cross_max_seq_len=32, is_context_diffusion=False):
         super().__init__()
         self.dim = dim
         self.ff_mult = ff_mult
+        self.is_context_diffusion = is_context_diffusion
         self.layers = nn.ModuleList()
-        for _ in range(depth):
+        for _ in range(depth-1):
             self.layers.append(
                 nn.ModuleList([
                     nn.LayerNorm(dim),
@@ -183,8 +191,21 @@ class Encoder(nn.Module):
                     TimeConditionedResidual(dim*ff_mult, dim),
                 ])
             )
+        self.last_layers = nn.ModuleList([
+            nn.LayerNorm(dim),
+            XTAttention(dim, num_heads=num_heads),
+            GRUGating(dim),
+            nn.LayerNorm(dim),
+            XTAttention(dim, num_heads=num_heads),
+            GRUGating(dim),
+            nn.LayerNorm(dim),
+            FeedForward(dim, ff_mult),
+            TimeConditionedResidual(dim*ff_mult, dim),
+        ])
         self.project_embedding_to_position = self._get_continuous_position_layer()
         self.project_embedding_to_conscious = self._get_conscious_layer()
+        self.relative_position_layer = self._get_relative_position_layer(max_seq_len)
+        self.cross_relative_position_layer = self._get_relative_position_layer(cross_max_seq_len)
 
     def _get_continuous_position_layer(self):
         return torch.nn.Sequential(
@@ -194,8 +215,8 @@ class Encoder(nn.Module):
             nn.Linear(self.dim * self.ff_mult, self.dim),
         )
     
-    # def _get_relative_position_layer(self):
-        
+    def _get_relative_position_layer(self, max_seq_len:int):
+        return RelativePositionEmbedding(max_seq_len=max_seq_len, hidden_dim=self.dim)
     
     def _get_conscious_layer(self):
         return ConsciousnessEmbedding(
@@ -203,34 +224,55 @@ class Encoder(nn.Module):
             num_flag=2,
         )
     
-    def _get_xt_data(self, words, attention_mask):
+    def _get_xt_data(self, words, attention_mask_words, attention_mask_cross):
         # 여기서 position은 CPE(continuous position embedding)
         position_input = torch.arange(words.shape[1], device=words.device)
         position_input = repeat(position_input, 'n -> b n', b=words.shape[0])
         # make buffer word position to zero
-        position_input = (position_input+1) * attention_mask
+        if self.is_context_diffusion:
+            position_input = position_input+1
+        else:
+            position_input = (position_input+1) * attention_mask_words
         position = self.project_embedding_to_position(position_input)
-        conscious = self.project_embedding_to_conscious(attention_mask=attention_mask)
-        return position, conscious
+        conscious_words = self.project_embedding_to_conscious(attention_mask=attention_mask_words)
+        conscious_cross = self.project_embedding_to_conscious(attention_mask=attention_mask_cross)
+        return position, conscious_words, conscious_cross
         
-    def forward(self, words, cross_kv, attention_mask, time_emb=None):
-        position, conscious = self._get_xt_data(words, attention_mask)
-        
-        for norm1, cross_attn, cross_attn_residual, norm2, self_attn, self_attn_residual, norm3, ff, ff_residual in self.layers:
-            residual = words
-            words = cross_attn(norm1(words), position, conscious, cross_kv)
-            words = cross_attn_residual(words, residual)
-            residual = words
-            words = self_attn(norm2(words), position, conscious)
-            words = self_attn_residual(words, residual)
-            residual = words
-            words = ff(norm3(words))
-            words = ff_residual(words, residual, time_emb)
+    def forward(self, words, cross_kv, attention_mask_words, attention_mask_cross, time_emb=None):
+        # 여기서 position = RPE (고정 - 마지막 2개 레이어도 마찬가지로 사용)
+        # conscious도 고정
+        rpe_words = self.relative_position_layer(words.shape[0], words.shape[1], words.device)
+        rpe_cross = self.cross_relative_position_layer(cross_kv.shape[0], cross_kv.shape[1], cross_kv.device)
+        cpe, conscious_words, conscious_cross = self._get_xt_data(words, attention_mask_words, attention_mask_cross)
+        # 마지막 2개 레이어: CPE 추가, hidden state에 더해서 사용
+        for layers in self.layers:
+            words = self._forward_layers(layers, words, cross_kv, rpe_words, rpe_cross, conscious_words, conscious_cross, time_emb)
+        words_plus_rpe = words + cpe
+        words = self._forward_layers(self.last_layers, words_plus_rpe, words, rpe_words, rpe_words, conscious_words, conscious_words, time_emb)
+        words = self._forward_layers(self.last_layers, words, words, rpe_words, rpe_words, conscious_words, conscious_words, time_emb)
+        return words
+
+    def _forward_layers(self, layers, words, cross_kv, rpe_words, rpe_cross, conscious_words, conscious_cross, time_emb=None):
+        (norm1, cross_attn, cross_attn_residual,
+        norm2, self_attn, self_attn_residual,
+        norm3, ff, ff_residual) = layers
+        residual = words
+        # print('words 1:', words.shape)
+        words = cross_attn(norm1(words), rpe_words, conscious_words, cross_kv, rpe_cross, conscious_cross)
+        # print('words 2:', words.shape)
+        words = cross_attn_residual(words, residual)
+        # print('words 3:', words.shape)
+        residual = words
+        words = self_attn(norm2(words), rpe_words, conscious_words, norm2(words), rpe_words, conscious_words)
+        words = self_attn_residual(words, residual)
+        residual = words
+        words = ff(norm3(words))
+        words = ff_residual(words, residual, time_emb)
         return words
 
 
 class ContextEncoder(nn.Module):
-    def __init__(self, dim, cross_dim, depth, num_heads=8, ff_mult=4):
+    def __init__(self, dim, cross_dim, depth, num_heads=8, ff_mult=4, max_seq_len=32):
         super().__init__()
         self.dim = dim
         self.ff_mult = ff_mult

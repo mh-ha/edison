@@ -1,9 +1,9 @@
 import math
 
 import torch
-from torch import nn
+from torch import nn, einsum
 import torch.nn.functional as F
-from einops import rearrange
+from einops import rearrange, repeat
 
 
 def l2norm(t, groups = 1):
@@ -54,40 +54,43 @@ class ConsciousnessEmbedding(nn.Module):
 class RelativePositionEmbedding(nn.Module):
     def __init__(
             self,
-            num_heads:int=12,
-            num_head_dim:int=64,
             max_seq_len:int=512,
             hidden_dim:int=768,
             layer_norm_eps:float=1e-9,
-            normalize_relative_embedding:bool=True,
+            # normalize_relative_embedding:bool=True,
             **kwargs
     ):
         super().__init__()
-        self.num_heads = num_heads
-        self.num_head_dim = num_head_dim
         self.max_seq_len = max_seq_len
         self.position_bucket = self.max_seq_len // 2
         self.hidden_dim = hidden_dim
         self.layer_norm_eps = layer_norm_eps
-        self.normalize_relative_embedding = normalize_relative_embedding
+        # self.normalize_relative_embedding = normalize_relative_embedding
         self.relative_position_embedding_layer = nn.Embedding(max_seq_len, hidden_dim)
-        if normalize_relative_embedding:
-            self.layernorm = nn.LayerNorm(hidden_dim, layer_norm_eps)
-        self.relative_position_query_layer = nn.Linear(hidden_dim, hidden_dim)
-        self.relative_position_key_layer = nn.Linear(hidden_dim, hidden_dim)
+        # if normalize_relative_embedding:
+        self.layernorm = nn.LayerNorm(hidden_dim, layer_norm_eps)
+        # self.relative_position_query_layer = nn.Linear(hidden_dim, hidden_dim)
+        # self.relative_position_key_layer = nn.Linear(hidden_dim, hidden_dim)
 
-    def forward(self, seq_len:int):
-        relative_position_idx = self.generate_relative_position(seq_len)
-        # relative_position: (1, seq_len(q), seq_len(k))
+    def forward(self, num_batch:int, max_seq_len:int, device):
+        relative_position_idx = self.generate_relative_position(max_seq_len)
+        relative_position_idx = torch.clamp(
+            relative_position_idx+self.position_bucket,
+            0,
+            self.position_bucket*2-1
+        ).squeeze(0).to(device)
         relative_position_embedding = self.generate_relative_position_embedding()
+        # relative_position: (1, seq_len(q), seq_len(k))
         # relative_position_embedding: (1, max_seq_len, hidden_dim)
-        relative_position_query = self.relative_position_query_layer(relative_position_embedding)
-        relative_position_key = self.relative_position_key_layer(relative_position_embedding)
-        relative_position_idx = torch.clamp(relative_position_idx + self.position_bucket, 0, self.position_bucket*2-1).squeeze(0)
+        # relative_position_query = self.relative_position_query_layer(relative_position_embedding)
+        # relative_position_key = self.relative_position_key_layer(relative_position_embedding)
         # relative_position_query: (max_seq_len, hidden_dim)
         # relative_position_key: (max_seq_len, hidden_dim)
         # relative_position_idx: (1, seq_len(q), seq_len(k))
-        return (relative_position_query, relative_position_key, relative_position_idx)
+        relative_position = einsum('i i, i d -> i d', relative_position_idx, relative_position_embedding)
+        relative_position = self.layernorm(relative_position)
+        relative_position = repeat(relative_position, 'i d -> b i d', b=num_batch)
+        return relative_position
 
     def generate_relative_position(self, seq_len:int):
         relative_position = self.build_relative_position(seq_len, seq_len)
@@ -121,10 +124,10 @@ class RelativePositionEmbedding(nn.Module):
         return rel_pos_ids
     
     def generate_relative_position_embedding(self):
-        if self.normalize_relative_embedding:
-            relative_position_embedding_weight = self.layernorm(self.relative_position_embedding_layer.weight)
-        else:
-            relative_position_embedding_weight = self.relative_position_embedding_layer.weight
+        # if self.normalize_relative_embedding:
+        # relative_position_embedding_weight = self.layernorm(self.relative_position_embedding_layer.weight)
+        # else:
+        relative_position_embedding_weight = self.relative_position_embedding_layer.weight
         return relative_position_embedding_weight
 
 

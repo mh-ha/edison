@@ -34,7 +34,7 @@ class SinusoidalPosEmb(nn.Module):
 
 class DiffusionTransformer(nn.Module):
     def __init__(
-        self, tx_dim, tx_depth, heads, latent_dim=None, max_seq_len=64, self_condition=False, 
+        self, tx_dim, tx_depth, heads, embedding_dim, context_dim, max_seq_len=64, cross_max_seq_len=32, self_condition=False, 
         dropout=0.1, scale_shift=False, class_conditional=False, num_classes=0, 
         class_unconditional_prob=0, seq2seq=False, seq2seq_context_dim=0, 
         dual_output=False, num_dense_connections=0, dense_output_connection=False,
@@ -42,7 +42,7 @@ class DiffusionTransformer(nn.Module):
     ):
         super().__init__()
 
-        self.latent_dim = latent_dim
+        self.context_dim = context_dim
         self.self_condition = self_condition
         self.scale_shift = scale_shift
         self.class_conditional = class_conditional
@@ -55,21 +55,25 @@ class DiffusionTransformer(nn.Module):
 
         self.time_mlp = self._build_time_mlp(tx_dim)
         self.time_pos_embed_mlp = nn.Sequential(nn.GELU(), nn.Linear(tx_dim * 4, tx_dim))
-        self.pos_emb = AbsolutePositionalEmbedding(tx_dim, max_seq_len)
-        self.encoder = self._build_encoder(tx_dim, latent_dim, tx_depth, heads, is_context_diffusion)
-
+        # self.pos_emb = AbsolutePositionalEmbedding(tx_dim, max_seq_len)
         self.class_embedding = self._build_class_embedding(tx_dim, num_classes, class_conditional)
         self.null_embedding_seq2seq, self.seq2seq_proj = self._build_seq2seq(seq2seq, seq2seq_context_dim, tx_dim)
 
-        self.input_proj = nn.Linear(tx_dim * 2 if self_condition else tx_dim, tx_dim)
-        self.init_self_cond = nn.Parameter(torch.randn(1, tx_dim)) if self_condition else None
+        if is_context_diffusion:
+            self.encoder = self._build_encoder(tx_dim, embedding_dim, tx_depth, heads, max_seq_len, cross_max_seq_len, is_context_diffusion)
+            self.input_proj = nn.Linear(context_dim * 2 if self_condition else context_dim, tx_dim)
+            self.init_self_cond = nn.Parameter(torch.randn(1, context_dim)) if self_condition else None
+            self.output_proj = nn.Linear(tx_dim * 2 if dense_output_connection else tx_dim, context_dim * 2 if dual_output else context_dim)
+        else:
+            self.encoder = self._build_encoder(tx_dim, context_dim, tx_depth, heads, max_seq_len, cross_max_seq_len, is_context_diffusion)
+            self.input_proj = nn.Linear(embedding_dim * 2 if self_condition else embedding_dim, tx_dim)
+            self.init_self_cond = nn.Parameter(torch.randn(1, embedding_dim)) if self_condition else None
+            self.output_proj = nn.Linear(tx_dim * 2 if dense_output_connection else tx_dim, embedding_dim * 2 if dual_output else embedding_dim)
         if self_condition:
             nn.init.normal_(self.init_self_cond, std=0.02)
-
         self.norm = nn.LayerNorm(tx_dim)
-        self.output_proj = nn.Linear(tx_dim * 2 if dense_output_connection else tx_dim, tx_dim * 2 if dual_output else tx_dim)
-
         init_zero_(self.output_proj)
+
 
     def _build_time_mlp(self, tx_dim):
         sinu_pos_emb = SinusoidalPosEmb(tx_dim)
@@ -81,21 +85,25 @@ class DiffusionTransformer(nn.Module):
             nn.Linear(time_emb_dim, time_emb_dim)
         )
 
-    def _build_encoder(self, tx_dim, latent_dim, tx_depth, heads, is_context_diffusion):
-        if is_context_diffusion:
-            return ContextEncoder(
-                dim=tx_dim,
-                cross_dim=latent_dim,
-                depth=tx_depth,
-                num_heads=heads,
-            )
-        else:
-            return Encoder(
-                dim=tx_dim,
-                cross_dim=latent_dim,
-                depth=tx_depth,
-                num_heads=heads,
-            )
+    def _build_encoder(self, tx_dim, cross_dim, tx_depth, heads, max_seq_len, cross_max_seq_len, is_context_diffusion):
+        # if is_context_diffusion:
+        #     return ContextEncoder(
+        #         dim=tx_dim,
+        #         cross_dim=latent_dim,
+        #         depth=tx_depth,
+        #         num_heads=heads,
+        #         max_seq_len=max_seq_len,
+        #     )
+        # else:
+        return Encoder(
+            dim=tx_dim,
+            cross_dim=cross_dim,
+            depth=tx_depth,
+            num_heads=heads,
+            max_seq_len=max_seq_len,
+            cross_max_seq_len=cross_max_seq_len,
+            is_context_diffusion=is_context_diffusion,
+        )
 
     def _build_class_embedding(self, tx_dim, num_classes, class_conditional):
         if class_conditional:
@@ -129,17 +137,23 @@ class DiffusionTransformer(nn.Module):
             class_emb = rearrange(class_emb, 'b d -> b 1 d')
             time_emb = time_emb + class_emb
 
-        pos_emb = self.pos_emb(z_t)
+        # pos_emb = self.pos_emb(z_t)
 
         if self.self_condition:
             z_t = torch.cat((z_t, main_self_cond if main_self_cond is not None else repeat(self.init_self_cond, '1 d -> b l d', b=z_t.shape[0], l=z_t.shape[1])), dim=-1)
 
         x_input = self.input_proj(z_t)
-        tx_input = x_input + pos_emb + self.time_pos_embed_mlp(time_emb)
+        # tx_input = x_input + pos_emb + self.time_pos_embed_mlp(time_emb)
+        tx_input = x_input + self.time_pos_embed_mlp(time_emb)
         main_latents = tx_input
 
         # context, context_mask = self._build_context(embedding_latents, embedding_latents_mask, z_t.shape[0], z_t.device)
-        z_t = self.encoder(main_latents, cross_kv=sub_latents, attention_mask=main_latents_mask, time_emb=time_emb)
+        z_t = self.encoder(
+            main_latents,
+            cross_kv=sub_latents,
+            attention_mask_words=main_latents_mask,
+            attention_mask_cross=sub_latents_mask,
+            time_emb=time_emb)
 
         z_t = self.norm(z_t)
         z_t = self.output_proj(z_t)
@@ -185,8 +199,10 @@ class EdisonGaussianDiffusion(nn.Module):
             tx_dim=config.tx_dim,
             tx_depth=config.tx_depth,
             heads=config.tx_dim // config.attn_head_dim,
-            latent_dim=config.latent_dim,
+            embedding_dim=config.tx_dim,
+            context_dim=config.latent_dim,
             max_seq_len=config.max_seq_len,
+            cross_max_seq_len=config.num_encoder_latents,
             self_condition=config.self_condition,
             scale_shift=config.scale_shift,
             dropout=config.dropout,
@@ -199,11 +215,13 @@ class EdisonGaussianDiffusion(nn.Module):
             is_context_diffusion=False,
         )
         self.context_diffusion_model = DiffusionTransformer(
-            tx_dim=config.latent_dim,
+            tx_dim=config.tx_dim,
             tx_depth=config.tx_depth,
-            heads=config.latent_dim // config.attn_head_dim,
-            latent_dim=config.tx_dim,
-            max_seq_len=config.max_seq_len,
+            heads=config.tx_dim // config.attn_head_dim,
+            embedding_dim=config.tx_dim,
+            context_dim=config.latent_dim,
+            max_seq_len=config.num_encoder_latents,
+            cross_max_seq_len=config.max_seq_len,
             self_condition=config.self_condition,
             scale_shift=config.scale_shift,
             dropout=config.dropout,
@@ -271,7 +289,9 @@ class EdisonGaussianDiffusion(nn.Module):
             class_id=class_id,
             sub_latents=sub_latents,
             main_latents_mask=main_latents_mask,
+            sub_latents_mask=sub_latents_mask,
         )
+        # print(f"main_latents:{main_latents.shape}, model_output: {model_output.shape}")
         # if cls_free_guidance != 1.0:
         #     unc_class_id = torch.full_like(class_id, fill_value=self.diffusion_model.num_classes) if class_id is not None else None
         #     unc_model_output = self.diffusion_model(context_latents, mask, time_cond, context_self_cond, class_id=unc_class_id)
@@ -375,9 +395,12 @@ class EdisonGaussianDiffusion(nn.Module):
         )
         target = alpha.sqrt() * noise - (1 - alpha).sqrt() * txt_latent
         pred = predictions.pred_v
-        loss = self.loss_fn(pred, target, reduction='none')
-        loss = rearrange([reduce(loss[i][:torch.sum(context_latents_mask[i])], 'l d -> 1', 'mean') for i in range(txt_latent.shape[0])], 'b 1 -> b 1')
+        loss = self.loss_fn(pred, target, reduction='mean')
+        # print(f"loss: {loss.shape}, pred: {pred.shape}, target: {target.shape}")
         return loss.mean()
+        # loss = self.loss_fn(pred, target, reduction='none')
+        # loss = rearrange([reduce(loss[i][:torch.sum(context_latents_mask[i])], 'l d -> 1', 'mean') for i in range(txt_latent.shape[0])], 'b 1 -> b 1')
+        # return loss.mean()
 
     def embedding_forward(self, embedding_latents, context_latents, embedding_latents_mask, class_id, context_latents_mask, times):
         txt_latent = embedding_latents
@@ -419,9 +442,11 @@ class EdisonGaussianDiffusion(nn.Module):
         )
         target = alpha.sqrt() * noise - (1 - alpha).sqrt() * txt_latent
         pred = predictions.pred_v
-        loss = self.loss_fn(pred, target, reduction='none')
-        loss = rearrange([reduce(loss[i][:torch.sum(embedding_latents_mask[i])], 'l d -> 1', 'mean') for i in range(txt_latent.shape[0])], 'b 1 -> b 1')
-        return loss.mean()
+        loss = self.loss_fn(pred, target, reduction='mean')
+        return loss
+        # loss = self.loss_fn(pred, target, reduction='none')
+        # loss = rearrange([reduce(loss[i][:torch.sum(embedding_latents_mask[i])], 'l d -> 1', 'mean') for i in range(txt_latent.shape[0])], 'b 1 -> b 1')
+        # return loss.mean()
 
     def _create_mask(self, shape, lengths, device):
         if self.using_latent_model:

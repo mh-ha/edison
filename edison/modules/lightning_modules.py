@@ -255,13 +255,15 @@ class EdisonDiffusion(L.LightningModule):
             NotImplementedError('latents_c0 not implemented')
         context_latents = context_latents['latents_c1']
         
-        # embedding_latents = self._get_xt_data(embedding_latents, attention_mask)
+        embedding_latents_mask = attention_mask
+        context_latents_mask = torch.ones(context_latents.shape[:2]).to(context_latents.device)
+        # print(embedding_latents.shape, context_latents.shape, embedding_latents_mask.shape, context_latents_mask.shape)
         loss = self.diffusion_model(
             embedding_latents=embedding_latents,
             context_latents=context_latents,
-            embedding_latents_mask=attention_mask,
+            embedding_latents_mask=embedding_latents_mask,
             class_id=class_id,
-            context_latents_mask=attention_mask,
+            context_latents_mask=context_latents_mask,
         )
         return loss
         
