@@ -171,11 +171,13 @@ class FeedForward(nn.Module):
 
 
 class Encoder(nn.Module):
-    def __init__(self, dim, cross_dim, depth, num_heads=8, ff_mult=4, max_seq_len=64, cross_max_seq_len=32, is_context_diffusion=False):
+    def __init__(self, dim, cross_dim, depth, num_heads=8, ff_mult=4, max_seq_len=64, cross_max_seq_len=32, is_context_diffusion=False, num_dense_connections=3):
         super().__init__()
         self.dim = dim
+        self.depth = depth
         self.ff_mult = ff_mult
         self.is_context_diffusion = is_context_diffusion
+        self.num_dense_connections = num_dense_connections
         self.layers = nn.ModuleList()
         for _ in range(depth-1):
             self.layers.append(
@@ -206,6 +208,7 @@ class Encoder(nn.Module):
         self.project_embedding_to_conscious = self._get_conscious_layer()
         self.relative_position_layer = self._get_relative_position_layer(max_seq_len)
         self.cross_relative_position_layer = self._get_relative_position_layer(cross_max_seq_len)
+        self.proj_dense_connection = nn.Linear(dim*2, dim)
 
     def _get_continuous_position_layer(self):
         return torch.nn.Sequential(
@@ -245,8 +248,11 @@ class Encoder(nn.Module):
         rpe_cross = self.cross_relative_position_layer(cross_kv.shape[0], cross_kv.shape[1], cross_kv.device)
         cpe, conscious_words, conscious_cross = self._get_xt_data(words, attention_mask_words, attention_mask_cross)
         # 마지막 2개 레이어: CPE 추가, hidden state에 더해서 사용
-        for layers in self.layers:
+        hidden_states = []
+        for i, layers in enumerate(self.layers):
             words = self._forward_layers(layers, words, cross_kv, rpe_words, rpe_cross, conscious_words, conscious_cross, time_emb)
+            # Dense connection
+            self._maybe_dense_connection(i, words, hidden_states)
         words_plus_rpe = words + cpe
         words = self._forward_layers(self.last_layers, words_plus_rpe, words, rpe_words, rpe_words, conscious_words, conscious_words, time_emb)
         words = self._forward_layers(self.last_layers, words, words, rpe_words, rpe_words, conscious_words, conscious_words, time_emb)
@@ -269,6 +275,16 @@ class Encoder(nn.Module):
         words = ff(norm3(words))
         words = ff_residual(words, residual, time_emb)
         return words
+    
+    def _maybe_dense_connection(self, idx, words, hidden_states:list):
+        if idx < self.num_dense_connections:
+            hidden_states.append(words)
+            return words, hidden_states
+        elif idx >= (len(self.layers) - self.num_dense_connections):
+            words = self.proj_dense_connection(torch.cat([words, hidden_states.pop(-1)], dim=-1))
+            return words, hidden_states
+        else:
+            return words, hidden_states
 
 
 class ContextEncoder(nn.Module):

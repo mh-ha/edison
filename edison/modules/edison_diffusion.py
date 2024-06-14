@@ -37,7 +37,7 @@ class DiffusionTransformer(nn.Module):
         self, tx_dim, tx_depth, heads, embedding_dim, context_dim, max_seq_len=64, cross_max_seq_len=32, self_condition=False, 
         dropout=0.1, scale_shift=False, class_conditional=False, num_classes=0, 
         class_unconditional_prob=0, seq2seq=False, seq2seq_context_dim=0, 
-        dual_output=False, num_dense_connections=0, dense_output_connection=False,
+        dual_output=False, num_dense_connections=3, dense_output_connection=False,
         is_context_diffusion=False,
     ):
         super().__init__()
@@ -60,12 +60,12 @@ class DiffusionTransformer(nn.Module):
         self.null_embedding_seq2seq, self.seq2seq_proj = self._build_seq2seq(seq2seq, seq2seq_context_dim, tx_dim)
 
         if is_context_diffusion:
-            self.encoder = self._build_encoder(tx_dim, embedding_dim, tx_depth, heads, max_seq_len, cross_max_seq_len, is_context_diffusion)
+            self.encoder = self._build_encoder(tx_dim, embedding_dim, tx_depth, heads, max_seq_len, cross_max_seq_len, is_context_diffusion, num_dense_connections)
             self.input_proj = nn.Linear(context_dim * 2 if self_condition else context_dim, tx_dim)
             self.init_self_cond = nn.Parameter(torch.randn(1, context_dim)) if self_condition else None
             self.output_proj = nn.Linear(tx_dim * 2 if dense_output_connection else tx_dim, context_dim * 2 if dual_output else context_dim)
         else:
-            self.encoder = self._build_encoder(tx_dim, context_dim, tx_depth, heads, max_seq_len, cross_max_seq_len, is_context_diffusion)
+            self.encoder = self._build_encoder(tx_dim, context_dim, tx_depth, heads, max_seq_len, cross_max_seq_len, is_context_diffusion, num_dense_connections)
             self.input_proj = nn.Linear(embedding_dim * 2 if self_condition else embedding_dim, tx_dim)
             self.init_self_cond = nn.Parameter(torch.randn(1, embedding_dim)) if self_condition else None
             self.output_proj = nn.Linear(tx_dim * 2 if dense_output_connection else tx_dim, embedding_dim * 2 if dual_output else embedding_dim)
@@ -85,7 +85,7 @@ class DiffusionTransformer(nn.Module):
             nn.Linear(time_emb_dim, time_emb_dim)
         )
 
-    def _build_encoder(self, tx_dim, cross_dim, tx_depth, heads, max_seq_len, cross_max_seq_len, is_context_diffusion):
+    def _build_encoder(self, tx_dim, cross_dim, tx_depth, heads, max_seq_len, cross_max_seq_len, is_context_diffusion, num_dense_connections):
         # if is_context_diffusion:
         #     return ContextEncoder(
         #         dim=tx_dim,
@@ -103,6 +103,7 @@ class DiffusionTransformer(nn.Module):
             max_seq_len=max_seq_len,
             cross_max_seq_len=cross_max_seq_len,
             is_context_diffusion=is_context_diffusion,
+            num_dense_connections=num_dense_connections,
         )
 
     def _build_class_embedding(self, tx_dim, num_classes, class_conditional):
