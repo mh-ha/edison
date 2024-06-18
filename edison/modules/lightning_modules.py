@@ -118,7 +118,7 @@ class LD4LGAE(L.LightningModule):
 
     def configure_optimizers(self):
         optimizer = torch.optim.AdamW(self.ae.parameters(), lr=self.config.learning_rate)
-        scheduler = torch.optim.lr_scheduler.LinearLR(optimizer, start_factor=1, end_factor=0, total_steps=50000)
+        scheduler = torch.optim.lr_scheduler.LinearLR(optimizer, start_factor=1, end_factor=0, total_iters=50000)
         return {
             'optimizer': optimizer,
             'lr_scheduler': scheduler,
@@ -161,7 +161,7 @@ class LD4LGDiffusion(L.LightningModule):
 
     def configure_optimizers(self):
         optimizer = torch.optim.AdamW(self.diffusion_model.parameters(), lr=self.config.learning_rate)
-        scheduler = torch.optim.lr_scheduler.LinearLR(optimizer, start_factor=1, end_factor=0, total_steps=50000)
+        scheduler = torch.optim.lr_scheduler.LinearLR(optimizer, start_factor=1, end_factor=0, total_iters=50000)
         return {
             'optimizer': optimizer,
             'lr_scheduler': scheduler,
@@ -243,7 +243,7 @@ class EdisonAE(L.LightningModule):
 
     def configure_optimizers(self):
         optimizer = torch.optim.AdamW(self.ae.parameters(), lr=self.config.learning_rate)
-        scheduler = torch.optim.lr_scheduler.LinearLR(optimizer, start_factor=1, end_factor=0, total_steps=50000)
+        scheduler = torch.optim.lr_scheduler.LinearLR(optimizer, start_factor=1, end_factor=0, total_iters=50000)
         return {
             'optimizer': optimizer,
             'lr_scheduler': scheduler,
@@ -294,7 +294,7 @@ class EdisonDiffusion(L.LightningModule):
 
     def configure_optimizers(self):
         optimizer = torch.optim.AdamW(self.diffusion_model.parameters(), lr=self.config.learning_rate)
-        scheduler = torch.optim.lr_scheduler.LinearLR(optimizer, start_factor=1, end_factor=0, total_steps=50000)
+        scheduler = torch.optim.lr_scheduler.LinearLR(optimizer, start_factor=1, end_factor=0, total_iters=50000)
         return {
             'optimizer': optimizer,
             'lr_scheduler': scheduler,
