@@ -69,9 +69,7 @@ class LD4LGAE(L.LightningModule):
         """
         inputs = batch['input_ids']
         attention_masks = batch['attention_mask']
-        encoder_outputs = self.lm.get_encoder()(
-            input_ids = inputs,
-            attention_mask = attention_masks)
+        encoder_outputs = self.lm(input_ids=inputs, attention_mask=attention_masks)
         encoder_outputs = self.ae.encode(
             encoder_outputs['last_hidden_state'],
             attention_mask=attention_masks)
@@ -92,7 +90,6 @@ class LD4LGAE(L.LightningModule):
         return outputs['logits']
 
     def training_step(self, batch, batch_idx):
-        print(batch['input_ids'].shape, batch['attention_mask'].shape, batch['labels'].shape)
         inputs = batch['input_ids']
         attention_masks = batch['attention_mask']
         targets = batch['labels']
@@ -192,9 +189,7 @@ class EdisonAE(L.LightningModule):
         """
         inputs = batch['input_ids']
         attention_masks = batch['attention_mask']
-        encoder_outputs = self.lm.get_encoder()(
-            input_ids = inputs,
-            attention_mask = attention_masks)
+        encoder_outputs = self.lm(input_ids=inputs, attention_mask=attention_masks)
         encoder_outputs = self.ae.encode(
             encoder_outputs['last_hidden_state'],
             attention_mask=attention_masks)
