@@ -92,6 +92,7 @@ class LD4LGAE(L.LightningModule):
         return outputs['logits']
 
     def training_step(self, batch, batch_idx):
+        print(batch)
         inputs = batch['input_ids']
         attention_masks = batch['attention_mask']
         targets = batch['labels']
