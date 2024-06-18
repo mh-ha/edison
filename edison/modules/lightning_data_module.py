@@ -46,7 +46,7 @@ def get_dataset(dataset_name, data_path=None):
 
 
 def get_dataloader(
-    config:Config,
+    config: Config,
     dataset,
     decoder_start_token_id,
     tokenizer,
@@ -54,7 +54,7 @@ def get_dataloader(
     mode='diffusion',
     shuffle=True,
     context_tokenizer=None,
-    ):
+):
     def tokenization(example):
         if mode == 'diffusion' and config.dataset_name in {'xsum', 'qqp'}:
             assert context_tokenizer is not None
@@ -91,8 +91,9 @@ def get_dataloader(
             collate_fn=collate_fn,
             batch_size=config.train_batch_size,
             shuffle=shuffle,
-            pin_memory = True,
-            num_workers = 4
+            pin_memory=True,
+            num_workers=4,
+            drop_last=True,
         )
     return dl
 
@@ -150,8 +151,9 @@ def get_xtdataloader(
             collate_fn=collate_fn,
             batch_size=config.train_batch_size,
             shuffle=shuffle,
-            pin_memory = True,
-            num_workers = 4
+            pin_memory=True,
+            num_workers=4,
+            drop_last=True,
         )
     return dl
 
