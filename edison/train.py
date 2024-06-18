@@ -18,8 +18,9 @@ from .modules.lightning_data_module import get_dataset, get_dataloader, get_xtda
 from .trainer import get_trainer
 from .config.config import Config
 
+
 class TrainFunction:
-    def __init__(self, config:Config):
+    def __init__(self, config: Config):
         self.config = config
         """
         0. init lightning trainer
@@ -39,7 +40,7 @@ class TrainFunction:
         """
         # 1. init LM
         lm, tokenizer = get_BART()
-        
+
         # 2. init AE
         ae = PerceiverAutoEncoder(
             dim_lm=self.config.dim_lm,
@@ -54,7 +55,7 @@ class TrainFunction:
         # training_step: inputs['input_ids', 'attention_mask'], target -> loss
         # forward: inputs['input_ids', 'attention_mask'] -> encoder_outputs
         model = LD4LGAE(self.config, lm, ae)
-        
+
         # 4. init data loader
         self.dataloader = get_dataloader(
             self.config,
@@ -63,7 +64,7 @@ class TrainFunction:
             tokenizer,
             self.config.max_seq_len,
             mode='ae',)
-        
+
         # 5. train
         self.trainer.fit(model, train_dataloaders=self.dataloader)
     

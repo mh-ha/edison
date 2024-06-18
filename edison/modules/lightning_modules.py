@@ -98,8 +98,8 @@ class LD4LGAE(L.LightningModule):
         # print(f"start: {inputs.shape} {attention_masks.shape} {targets.shape}")
         # LM encoder outputs
         encoder_outputs = self.lm.get_encoder()(
-            input_ids = inputs,
-            attention_mask = attention_masks)
+            input_ids=inputs,
+            attention_mask=attention_masks)
         # print(f"LM encoder outputs: {encoder_outputs['last_hidden_state'].shape}")
         # AE encoder, decoder outputs
         encoder_outputs = self.ae(
@@ -117,7 +117,12 @@ class LD4LGAE(L.LightningModule):
         return loss
 
     def configure_optimizers(self):
-        return torch.optim.AdamW(self.ae.parameters(), lr=self.config.learning_rate)
+        optimizer = torch.optim.AdamW(self.ae.parameters(), lr=self.config.learning_rate)
+        scheduler = torch.optim.lr_scheduler.LinearLR(optimizer, start_factor=1, end_factor=0, total_steps=50000)
+        return {
+            'optimizer': optimizer,
+            'lr_scheduler': scheduler,
+        }
 
 
 class LD4LGDiffusion(L.LightningModule):
@@ -155,7 +160,12 @@ class LD4LGDiffusion(L.LightningModule):
         return loss
 
     def configure_optimizers(self):
-        return torch.optim.AdamW(self.diffusion_model.parameters(), lr=self.config.learning_rate)
+        optimizer = torch.optim.AdamW(self.diffusion_model.parameters(), lr=self.config.learning_rate)
+        scheduler = torch.optim.lr_scheduler.LinearLR(optimizer, start_factor=1, end_factor=0, total_steps=50000)
+        return {
+            'optimizer': optimizer,
+            'lr_scheduler': scheduler,
+        }
 
 
 class EdisonAE(L.LightningModule):
@@ -232,7 +242,12 @@ class EdisonAE(L.LightningModule):
         return loss
 
     def configure_optimizers(self):
-        return torch.optim.AdamW(self.ae.parameters(), lr=self.config.learning_rate)
+        optimizer = torch.optim.AdamW(self.ae.parameters(), lr=self.config.learning_rate)
+        scheduler = torch.optim.lr_scheduler.LinearLR(optimizer, start_factor=1, end_factor=0, total_steps=50000)
+        return {
+            'optimizer': optimizer,
+            'lr_scheduler': scheduler,
+        }
 
 
 class EdisonDiffusion(L.LightningModule):
@@ -278,6 +293,9 @@ class EdisonDiffusion(L.LightningModule):
         return loss
 
     def configure_optimizers(self):
-        return torch.optim.AdamW(
-            self.diffusion_model.parameters(),
-            lr=self.config.learning_rate)
+        optimizer = torch.optim.AdamW(self.diffusion_model.parameters(), lr=self.config.learning_rate)
+        scheduler = torch.optim.lr_scheduler.LinearLR(optimizer, start_factor=1, end_factor=0, total_steps=50000)
+        return {
+            'optimizer': optimizer,
+            'lr_scheduler': scheduler,
+        }
