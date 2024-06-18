@@ -113,7 +113,7 @@ class LD4LGConfig(Config):
     gradient_clip_val:float = 1.0
     gradient_clip_algorithm:str = 'norm'
     gradient_accumulation_steps:int = 1
-    train_batch_size:int = 256
+    train_batch_size:int = 64
     max_seq_len:int = 64
     learning_rate:float = 1e-4  #1e-4 for AE, 2e-4 for diffusion
     #############################
@@ -158,7 +158,7 @@ class EdisonConfig(Config):
     gradient_clip_val:float = 1.0
     gradient_clip_algorithm:str = 'norm'
     gradient_accumulation_steps:int = 1
-    train_batch_size:int = 256  #TODO: 8은 되고 256은 안 되는 현상
+    train_batch_size:int = 64  #TODO: 8은 되고 256은 안 되는 현상
     max_seq_len:int = 64
     learning_rate:float = 1e-4  #1e-4 for AE, 2e-4 for diffusion
     """
