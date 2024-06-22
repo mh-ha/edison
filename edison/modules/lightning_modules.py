@@ -109,9 +109,10 @@ class LD4LGAE(L.LightningModule):
         # LM decoder outputs (loss)
         outputs = self.lm(
             labels=targets,
-            encoder_outputs=encoder_outputs)
+            encoder_outputs=encoder_outputs,
+            output_hidden_states=True,)  # Debugging
         loss = outputs.loss
-        print(f"decoder outputs: {outputs}")
+        print(f"decoder outputs: {outputs.decoder_hidden_states[-1].shape}")
         print(f"decoder logits outputs: {outputs.logits.shape}")
         # print(f"loss: {loss}")
         self.log('loss', loss, on_step=True, prog_bar=True)
