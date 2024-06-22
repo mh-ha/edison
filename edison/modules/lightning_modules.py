@@ -105,12 +105,13 @@ class LD4LGAE(L.LightningModule):
         encoder_outputs['last_hidden_state'] = self.ae(
             encoder_outputs['last_hidden_state'],
             attention_mask=attention_masks)
-        print(f"AE outputs - {encoder_outputs.shape}")
+        print(f"AE outputs - {encoder_outputs['last_hidden_state'].shape}")
         # LM decoder outputs (loss)
         outputs = self.lm(
             labels=targets,
             encoder_outputs=encoder_outputs)
         loss = outputs.loss
+        print(f"decoder outputs: {outputs}")
         print(f"decoder logits outputs: {outputs.logits.shape}")
         # print(f"loss: {loss}")
         self.log('loss', loss, on_step=True, prog_bar=True)
