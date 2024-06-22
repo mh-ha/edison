@@ -435,7 +435,7 @@ class EdisonPerceiverAutoEncoder(nn.Module):
         ff_mult=4,
         transformer_decoder=False,
         l2_normalize_latents=False,
-        encoding_mode:Literal['sentence_only', 'both_separately', 'both_together']='sentence_only',
+        encoding_mode: Literal['sentence_only', 'both_separately', 'both_together'] = 'sentence_only',
     ):
         super().__init__()
         self.encoding_mode = encoding_mode
@@ -456,19 +456,19 @@ class EdisonPerceiverAutoEncoder(nn.Module):
         ae_latent_c1 = self.perceiver_decoder(ae_latent['latents_c1'])
         ae_latent_c0 = self.perceiver_decoder(ae_latent['latents_c0'])
         return {'latents_c1': ae_latent_c1, 'latents_c0': ae_latent_c0}
-    
+
     def encode(self, encoder_outputs, attention_mask):
-        if self.encoding_mode == 'both_together':
-            attention_mask = torch.ones_like(encoder_outputs)
-            encoder_outputs = self.perceiver_encoder(encoder_outputs, attention_mask.bool())
-        elif self.encoding_mode == 'both_separately':
-            attention_mask_for_buffer = ~attention_mask.bool()
-            encoder_outputs = self.perceiver_encoder(encoder_outputs, attention_mask.bool())
-            buffer_latents = self.perceiver_encoder_for_buffer(encoder_outputs, attention_mask_for_buffer)
-            # sentence latents + buffer latents
-            encoder_outputs = encoder_outputs[attention_mask.bool()] + buffer_latents[attention_mask_for_buffer]
-        else:
-            encoder_outputs = self.perceiver_encoder(encoder_outputs, attention_mask.bool())
+        # if self.encoding_mode == 'both_together':
+        #     attention_mask = torch.ones_like(encoder_outputs)
+        #     encoder_outputs = self.perceiver_encoder(encoder_outputs, attention_mask.bool())
+        # elif self.encoding_mode == 'both_separately':
+        #     attention_mask_for_buffer = ~attention_mask.bool()
+        #     encoder_outputs = self.perceiver_encoder(encoder_outputs, attention_mask.bool())
+        #     buffer_latents = self.perceiver_encoder_for_buffer(encoder_outputs, attention_mask_for_buffer)
+        #     # sentence latents + buffer latents
+        #     encoder_outputs = encoder_outputs[attention_mask.bool()] + buffer_latents[attention_mask_for_buffer]
+        # else:
+        encoder_outputs = self.perceiver_encoder(encoder_outputs, attention_mask.bool())
         return encoder_outputs
 
     def forward(self, encoder_outputs, attention_mask):
