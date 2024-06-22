@@ -5,7 +5,7 @@ import lightning as L
 from .config.config import Config
 
 
-#TODO: 상세하게 구현
+# TODO: 상세하게 구현
 def get_trainer(config: Config):
     trainer = L.Trainer(
         # max_epochs=10,

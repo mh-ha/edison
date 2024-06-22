@@ -67,7 +67,7 @@ class TrainFunction:
 
         # 5. train
         self.trainer.fit(model, train_dataloaders=self.dataloader)
-    
+
     def train_LD4LG_Diffusion(self):
         """
         1. init LM
@@ -117,7 +117,7 @@ class TrainFunction:
         """
         # 1. init LM
         lm, tokenizer = get_BART()
-        
+
         # 2. init AE
         ae = EdisonPerceiverAutoEncoder(
             dim_lm=self.config.dim_lm,
@@ -133,7 +133,7 @@ class TrainFunction:
         # training_step: inputs['input_ids', 'attention_mask'], target -> loss
         # forward: inputs['input_ids', 'attention_mask'] -> encoder_outputs
         model = EdisonAE(self.config, lm, ae)
-        
+
         # 4. init data loader
         self.dataloader = get_xtdataloader(
             self.config,
@@ -143,10 +143,10 @@ class TrainFunction:
             self.config.max_seq_len,
             self.config.min_buffer_size,
             mode='ae',)
-        
+
         # 5. train
         self.trainer.fit(model, train_dataloaders=self.dataloader)
-        
+
     def train_edison_Diffusion(self):
         """
         1. init LM
@@ -189,8 +189,7 @@ class TrainFunction:
         self.trainer.fit(diffusion, train_dataloaders=self.dataloader)
 
 
-
-def main(config:Config):
+def main(config: Config):
     train_function = TrainFunction(config)
     if config.model_name == 'LD4LG':
         if config.train_for == 'AE':
