@@ -102,7 +102,7 @@ class LD4LGAE(L.LightningModule):
             attention_mask=attention_masks)
         print(f"LM encoder outputs: {encoder_outputs['last_hidden_state'].shape}")
         # AE encoder, decoder outputs
-        encoder_outputs = self.ae(
+        encoder_outputs['last_hidden_state'] = self.ae(
             encoder_outputs['last_hidden_state'],
             attention_mask=attention_masks)
         print(f"AE outputs - {encoder_outputs.shape}")
