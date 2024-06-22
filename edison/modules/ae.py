@@ -341,6 +341,7 @@ class EdisonPerceiverResampler(nn.Module):
         # print(latents_c1.shape, latents_c0.shape)
         return {'latents_c1': latents_c1, 'latents_c0': latents_c0}
 
+
 class Transformer(nn.Module):
     def __init__(
         self,
@@ -369,7 +370,6 @@ class Transformer(nn.Module):
         x = self.input_proj(x)
         pos_emb = self.pos_emb(x)
         x = x + pos_emb
-        
         for attn_layer, ff_layer in self.layers:
             x = attn_layer(x) + x
             x = ff_layer(x) + x
@@ -411,7 +411,7 @@ class PerceiverAutoEncoder(nn.Module):
 
     def decode(self, ae_latent):
         return self.perceiver_decoder(ae_latent)
-    
+
     def encode(self, encoder_outputs, attention_mask):
         return self.perceiver_encoder(encoder_outputs, mask=attention_mask.bool())
 

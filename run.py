@@ -1,9 +1,11 @@
 import argparse
 import warnings
-warnings.filterwarnings("ignore")
 
 from edison.config.config import EdisonConfig, LD4LGConfig
 from edison.train import main as train_main
+
+warnings.filterwarnings("ignore")
+
 
 def main():
     # Parse arguments
@@ -19,7 +21,7 @@ def main():
     if sum([args.ld4lg_ae, args.ld4lg_diffusion, args.edison_ae, args.edison_diffusion]) > 1:
         print('Please specify only one model to train')
         return
-    
+
     if args.ld4lg_ae:
         config = LD4LGConfig(train_for='AE')
     elif args.ld4lg_diffusion:
@@ -31,8 +33,9 @@ def main():
     else:
         raise ValueError('Invalid model')
     print(config)
-    
+
     train_main(config)
+
 
 if __name__ == '__main__':
     main()

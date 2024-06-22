@@ -62,7 +62,7 @@ class LD4LGAE(L.LightningModule):
         for param in lm.parameters():
             param.requires_grad = False
         self.ae = ae
-        
+
     def forward(self, batch):
         """
         Only Encode forward
@@ -70,13 +70,13 @@ class LD4LGAE(L.LightningModule):
         inputs = batch['input_ids']
         attention_masks = batch['attention_mask']
         encoder_outputs = self.lm.get_encoder()(
-            input_ids = inputs,
-            attention_mask = attention_masks)
+            input_ids=inputs,
+            attention_mask=attention_masks)
         encoder_outputs = self.ae.encode(
             encoder_outputs['last_hidden_state'],
             attention_mask=attention_masks)
         return encoder_outputs
-    
+
     def encode(self, input_ids, attention_masks):
         encoder_outputs = self.lm.get_encoder()(
             input_ids=input_ids,
@@ -95,23 +95,23 @@ class LD4LGAE(L.LightningModule):
         inputs = batch['input_ids']
         attention_masks = batch['attention_mask']
         targets = batch['labels']
-        # print(f"start: {inputs.shape} {attention_masks.shape} {targets.shape}")
+        print(f"start: {inputs.shape} {attention_masks.shape} {targets.shape}")
         # LM encoder outputs
         encoder_outputs = self.lm.get_encoder()(
             input_ids=inputs,
             attention_mask=attention_masks)
-        # print(f"LM encoder outputs: {encoder_outputs['last_hidden_state'].shape}")
+        print(f"LM encoder outputs: {encoder_outputs['last_hidden_state'].shape}")
         # AE encoder, decoder outputs
         encoder_outputs = self.ae(
             encoder_outputs['last_hidden_state'],
             attention_mask=attention_masks)
-        # print(f"AE outputs - {encoder_outputs.shape}")
+        print(f"AE outputs - {encoder_outputs.shape}")
         # LM decoder outputs (loss)
         outputs = self.lm(
             labels=targets,
             encoder_outputs=encoder_outputs)
         loss = outputs.loss
-        # print(f"decoder logits outputs: {outputs.logits.shape}")
+        print(f"decoder logits outputs: {outputs.logits.shape}")
         # print(f"loss: {loss}")
         self.log('loss', loss, on_step=True, prog_bar=True)
         return loss
