@@ -15,6 +15,7 @@ def main():
     parser.add_argument('--edison_ae', action='store_true', help='Train Edison AutoEncoder model', default=False)
     parser.add_argument('--edison_diffusion', action='store_true', help='Train Edison Diffusion model', default=False)
     parser.add_argument('--batch_size', type=int, default=256, help='Batch size for training', required=False)
+    parser.add_argument('--ae_checkpoint_path', type=str, default=None, help='Path to AE checkpoint', required=False)
     args = parser.parse_args()
     if not any([args.ld4lg_ae, args.ld4lg_diffusion, args.edison_ae, args.edison_diffusion]):
         print('Please specify a model to train')
@@ -35,7 +36,7 @@ def main():
         raise ValueError('Invalid model')
     print(config)
 
-    train_main(config)
+    train_main(config, **args.__dict__)
 
 
 if __name__ == '__main__':

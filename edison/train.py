@@ -8,8 +8,8 @@
     4) edison - Diffusion
 """
 import os
-os.environ['CURL_CA_BUNDLE'] = ''
-os.environ["TOKENIZERS_PARALLELISM"] = "false"
+
+import torch
 
 from .modules.lm import get_BART
 from .modules.ae import PerceiverAutoEncoder, EdisonPerceiverAutoEncoder
@@ -17,6 +17,9 @@ from .modules.lightning_modules import LD4LGAE, LD4LGDiffusion, EdisonAE, Edison
 from .modules.lightning_data_module import get_dataset, get_dataloader, get_xtdataloader
 from .trainer import get_trainer
 from .config.config import Config
+
+os.environ['CURL_CA_BUNDLE'] = ''
+os.environ["TOKENIZERS_PARALLELISM"] = "false"
 
 
 class TrainFunction:
@@ -30,7 +33,7 @@ class TrainFunction:
         self.trainer = get_trainer(config)
         self.dataset = get_dataset(config.dataset_name)
 
-    def train_LD4LG_AE(self):
+    def train_LD4LG_AE(self, **kwargs):
         """
         1. init LM
         2. init AE
@@ -68,7 +71,7 @@ class TrainFunction:
         # 5. train
         self.trainer.fit(model, train_dataloaders=self.dataloader)
 
-    def train_LD4LG_Diffusion(self):
+    def train_LD4LG_Diffusion(self, **kwargs):
         """
         1. init LM
         2. init pretrained AE
@@ -77,23 +80,32 @@ class TrainFunction:
         5. init data loader
         6. train
         """
-        # # 1-2. load pretrained LM and AE
-        # ae = LD4LGAE.load_from_checkpoint(self.config.pretrained_ae_path)
-        # 1-2. init LM and AE
+        # 1-2. load pretrained LM and AE
+        checkpoint_path = kwargs.get('ae_checkpoint_path', None)
+        if checkpoint_path:
+            model = LD4LGAE.load_from_checkpoint(
+                checkpoint_path,
+                map_location='cuda' if torch.cuda.is_available() else 'cpu',
+                strict=False,
+            )
+        else:
+            raise ValueError('ae_checkpoint_path is required')
         lm, tokenizer = get_BART()
-        ae = PerceiverAutoEncoder(
-            dim_lm=self.config.dim_lm,
-            dim_ae=self.config.dim_ae,
-            num_layers=self.config.num_layers,
-            num_encoder_latents=self.config.num_encoder_latents,
-            num_decoder_latents=self.config.num_decoder_latents,
-            transformer_decoder=self.config.transformer_decoder,
-            l2_normalize_latents=self.config.l2_normalize_latents)
-        model = LD4LGAE(self.config, lm, ae)
-        
+        # 1-2. init LM and AE
+        # lm, tokenizer = get_BART()
+        # ae = PerceiverAutoEncoder(
+        #     dim_lm=self.config.dim_lm,
+        #     dim_ae=self.config.dim_ae,
+        #     num_layers=self.config.num_layers,
+        #     num_encoder_latents=self.config.num_encoder_latents,
+        #     num_decoder_latents=self.config.num_decoder_latents,
+        #     transformer_decoder=self.config.transformer_decoder,
+        #     l2_normalize_latents=self.config.l2_normalize_latents)
+        # model = LD4LGAE(self.config, lm, ae)
+
         # 3-4. init lightning module using LM, AE, Diffusion
         diffusion = LD4LGDiffusion(self.config, model)
-        
+
         # 5. init data loader
         self.dataloader = get_dataloader(
             self.config,
@@ -102,11 +114,11 @@ class TrainFunction:
             tokenizer,
             self.config.max_seq_len,
             mode='diffusion',)
-        
+
         # 6. train
         self.trainer.fit(diffusion, train_dataloaders=self.dataloader)
-    
-    def train_edison_AE(self):
+
+    def train_edison_AE(self, **kwargs):
         """
         1. init LM
         2. init AE
@@ -147,7 +159,7 @@ class TrainFunction:
         # 5. train
         self.trainer.fit(model, train_dataloaders=self.dataloader)
 
-    def train_edison_Diffusion(self):
+    def train_edison_Diffusion(self, **kwargs):
         """
         1. init LM
         2. init pretrained AE
@@ -156,25 +168,34 @@ class TrainFunction:
         5. init data loader
         6. train
         """
-        # # 1-2. load pretrained LM and AE
-        # ae = EdisonAE.load_from_checkpoint(self.config.pretrained_ae_path)
-        # 1-2. init LM and AE
+        # 1-2. load pretrained LM and AE
+        checkpoint_path = kwargs.get('ae_checkpoint_path', None)
+        if checkpoint_path:
+            model = EdisonAE.load_from_checkpoint(
+                checkpoint_path,
+                map_location='cuda' if torch.cuda.is_available() else 'cpu',
+                strict=False,
+            )
+        else:
+            raise ValueError('ae_checkpoint_path is required')
         lm, tokenizer = get_BART()
-        ae = EdisonPerceiverAutoEncoder(
-            dim_lm=self.config.dim_lm,
-            dim_ae=self.config.dim_ae,
-            num_layers=self.config.num_layers,
-            num_encoder_latents=self.config.num_encoder_latents,
-            num_decoder_latents=self.config.num_decoder_latents,
-            transformer_decoder=self.config.transformer_decoder,
-            l2_normalize_latents=self.config.l2_normalize_latents,
-            encoding_mode=self.config.encoding_mode
-        )
-        model = EdisonAE(self.config, lm, ae)
-        
+        # # 1-2. init LM and AE
+        # lm, tokenizer = get_BART()
+        # ae = EdisonPerceiverAutoEncoder(
+        #     dim_lm=self.config.dim_lm,
+        #     dim_ae=self.config.dim_ae,
+        #     num_layers=self.config.num_layers,
+        #     num_encoder_latents=self.config.num_encoder_latents,
+        #     num_decoder_latents=self.config.num_decoder_latents,
+        #     transformer_decoder=self.config.transformer_decoder,
+        #     l2_normalize_latents=self.config.l2_normalize_latents,
+        #     encoding_mode=self.config.encoding_mode
+        # )
+        # model = EdisonAE(self.config, lm, ae)
+
         # 3-4. init lightning module using LM, AE, Diffusion
         diffusion = EdisonDiffusion(self.config, model)
-        
+
         # 5. init data loader
         self.dataloader = get_xtdataloader(
             self.config,
@@ -184,25 +205,25 @@ class TrainFunction:
             self.config.max_seq_len,
             self.config.min_buffer_size,
             mode='diffusion',)
-        
+
         # 6. train
         self.trainer.fit(diffusion, train_dataloaders=self.dataloader)
 
 
-def main(config: Config):
+def main(config: Config, **kwargs):
     train_function = TrainFunction(config)
     if config.model_name == 'LD4LG':
         if config.train_for == 'AE':
-            train_function.train_LD4LG_AE()
+            train_function.train_LD4LG_AE(**kwargs)
         elif config.train_for == 'Diffusion':
-            train_function.train_LD4LG_Diffusion()
+            train_function.train_LD4LG_Diffusion(**kwargs)
         else:
             raise ValueError(f'{config.train_for} is not supported')
     elif config.model_name == 'Edison':
         if config.train_for == 'AE':
-            train_function.train_edison_AE()
+            train_function.train_edison_AE(**kwargs)
         elif config.train_for == 'Diffusion':
-            train_function.train_edison_Diffusion()
+            train_function.train_edison_Diffusion(**kwargs)
         else:
             raise ValueError(f'{config.train_for} is not supported')
     else:

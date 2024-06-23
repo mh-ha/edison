@@ -50,10 +50,10 @@ from .positional_embedding import SinusoidalPosEmb, ConsciousnessEmbedding
 class LD4LGAE(L.LightningModule):
     def __init__(
         self,
-        config:Config,
-        lm:torch.nn.Module,
-        ae:torch.nn.Module,
-        ):
+        config: Config,
+        lm: torch.nn.Module,
+        ae: torch.nn.Module,
+    ):
         super().__init__()
         self.save_hyperparameters('config')
         self.config = config
