@@ -91,7 +91,7 @@ class TrainFunction:
             num_decoder_latents=self.config.num_decoder_latents,
             transformer_decoder=self.config.transformer_decoder,
             l2_normalize_latents=self.config.l2_normalize_latents)
-        print(f"debug - ae_params : {list(ae.parameters())[0]}")
+        # print(f"debug - ae_params : {list(ae.parameters())[0]}")
         if checkpoint_path:
             model = LD4LGAE.load_from_checkpoint(
                 checkpoint_path,
@@ -102,26 +102,8 @@ class TrainFunction:
                 ae=ae,
             )
         else:
-            raise ValueError('ae_checkpoint_path is required')
-        print(f"debug - model_params : {list(model.ae.parameters())[0]}")
-        # 1-2. init LM and AE
-        # lm, tokenizer = get_BART()
-        # ae = PerceiverAutoEncoder(
-        #     dim_lm=self.config.dim_lm,
-        #     dim_ae=self.config.dim_ae,
-        #     num_layers=self.config.num_layers,
-        #     num_encoder_latents=self.config.num_encoder_latents,
-        #     num_decoder_latents=self.config.num_decoder_latents,
-        #     transformer_decoder=self.config.transformer_decoder,
-        #     l2_normalize_latents=self.config.l2_normalize_latents)
-        # model = LD4LGAE(self.config, lm, ae)
-        # checkpoint_path = kwargs.get('ae_checkpoint_path', None)
-        # if checkpoint_path:
-        #     model = model.load_from_checkpoint(
-        #         checkpoint_path,
-        #         map_location='cuda' if torch.cuda.is_available() else 'cpu',
-        #         strict=False,
-        #     )
+            model = LD4LGAE(self.config, lm, ae)
+        # print(f"debug - model_params : {list(model.ae.parameters())[0]}")
 
         # 3-4. init lightning module using LM, AE, Diffusion
         diffusion = LD4LGDiffusion(self.config, model)
@@ -190,15 +172,28 @@ class TrainFunction:
         """
         # 1-2. load pretrained LM and AE
         checkpoint_path = kwargs.get('ae_checkpoint_path', None)
+        lm, tokenizer = get_BART()
+        ae = EdisonPerceiverAutoEncoder(
+            dim_lm=self.config.dim_lm,
+            dim_ae=self.config.dim_ae,
+            num_layers=self.config.num_layers,
+            num_encoder_latents=self.config.num_encoder_latents,
+            num_decoder_latents=self.config.num_decoder_latents,
+            transformer_decoder=self.config.transformer_decoder,
+            l2_normalize_latents=self.config.l2_normalize_latents,
+            encoding_mode=self.config.encoding_mode
+        )
         if checkpoint_path:
             model = EdisonAE.load_from_checkpoint(
                 checkpoint_path,
                 map_location='cuda' if torch.cuda.is_available() else 'cpu',
                 strict=False,
+                lm=lm,
+                ae=ae,
+                config=self.config
             )
         else:
-            raise ValueError('ae_checkpoint_path is required')
-        lm, tokenizer = get_BART()
+            model = EdisonAE(self.config, lm, ae)
         # # 1-2. init LM and AE
         # lm, tokenizer = get_BART()
         # ae = EdisonPerceiverAutoEncoder(
