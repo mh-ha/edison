@@ -80,28 +80,35 @@ class TrainFunction:
         5. init data loader
         6. train
         """
-        # 1-2. load pretrained LM and AE
+        # # 1-2. load pretrained LM and AE
+        # checkpoint_path = kwargs.get('ae_checkpoint_path', None)
+        # if checkpoint_path:
+        #     model = LD4LGAE.load_from_checkpoint(
+        #         checkpoint_path,
+        #         map_location='cuda' if torch.cuda.is_available() else 'cpu',
+        #         strict=False,
+        #     )
+        # else:
+        #     raise ValueError('ae_checkpoint_path is required')
+        # lm, tokenizer = get_BART()
+        # 1-2. init LM and AE
+        lm, tokenizer = get_BART()
+        ae = PerceiverAutoEncoder(
+            dim_lm=self.config.dim_lm,
+            dim_ae=self.config.dim_ae,
+            num_layers=self.config.num_layers,
+            num_encoder_latents=self.config.num_encoder_latents,
+            num_decoder_latents=self.config.num_decoder_latents,
+            transformer_decoder=self.config.transformer_decoder,
+            l2_normalize_latents=self.config.l2_normalize_latents)
+        model = LD4LGAE(self.config, lm, ae)
         checkpoint_path = kwargs.get('ae_checkpoint_path', None)
         if checkpoint_path:
-            model = LD4LGAE.load_from_checkpoint(
+            model = model.load_from_checkpoint(
                 checkpoint_path,
                 map_location='cuda' if torch.cuda.is_available() else 'cpu',
                 strict=False,
             )
-        else:
-            raise ValueError('ae_checkpoint_path is required')
-        lm, tokenizer = get_BART()
-        # 1-2. init LM and AE
-        # lm, tokenizer = get_BART()
-        # ae = PerceiverAutoEncoder(
-        #     dim_lm=self.config.dim_lm,
-        #     dim_ae=self.config.dim_ae,
-        #     num_layers=self.config.num_layers,
-        #     num_encoder_latents=self.config.num_encoder_latents,
-        #     num_decoder_latents=self.config.num_decoder_latents,
-        #     transformer_decoder=self.config.transformer_decoder,
-        #     l2_normalize_latents=self.config.l2_normalize_latents)
-        # model = LD4LGAE(self.config, lm, ae)
 
         # 3-4. init lightning module using LM, AE, Diffusion
         diffusion = LD4LGDiffusion(self.config, model)
