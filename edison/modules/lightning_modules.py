@@ -158,7 +158,7 @@ class LD4LGDiffusion(L.LightningModule):
         attention_masks = batch['attention_mask']
         class_id = batch['label'] if 'label' in batch else None
         encoder_outputs = self.autoencoder.encode(inputs, attention_masks)
-        loss = self.forward(encoder_outputs, class_id)
+        loss = self(encoder_outputs, class_id)
         self.log('loss', loss, on_step=True, prog_bar=True)
         return loss
 
@@ -262,23 +262,23 @@ class EdisonAE(L.LightningModule):
 class EdisonDiffusion(L.LightningModule):
     def __init__(
         self,
-        config:Config,
-        autoencoder:EdisonAE,
-        ):
+        config: Config,
+        autoencoder: EdisonAE,
+    ):
         super().__init__()
         self.save_hyperparameters('config')
         self.config = config
         self.autoencoder = autoencoder
         self.autoencoder.freeze()
-        
+
         self.diffusion_model = EdisonGaussianDiffusion(config=config)
-    
+
     def forward(self, embedding_latents, context_latents, attention_mask, class_id=None):
         # TODO: implement latents_c0 process
         if self.config.use_latents_c0:
             NotImplementedError('latents_c0 not implemented')
         context_latents = context_latents['latents_c1']
-        
+
         embedding_latents_mask = attention_mask
         context_latents_mask = torch.ones(context_latents.shape[:2]).to(context_latents.device)
         # print(embedding_latents.shape, context_latents.shape, embedding_latents_mask.shape, context_latents_mask.shape)
@@ -290,7 +290,7 @@ class EdisonDiffusion(L.LightningModule):
             context_latents_mask=context_latents_mask,
         )
         return loss
-        
+
     def training_step(self, batch, batch_idx):
         # print(batch)
         inputs = batch['input_ids']
