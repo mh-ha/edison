@@ -9,7 +9,7 @@ from .config.config import Config
 def get_trainer(config: Config):
     trainer = L.Trainer(
         # max_epochs=10,
-        max_steps=50000,
+        max_steps=500000,
         precision=16,
         gradient_clip_val=config.gradient_clip_val,
         gradient_clip_algorithm=config.gradient_clip_algorithm,
