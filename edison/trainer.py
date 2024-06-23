@@ -8,7 +8,7 @@ from .config.config import Config
 def get_trainer(config: Config):
     trainer = L.Trainer(
         # max_epochs=10,
-        strategy=DDPStrategy(find_unused_parameters=True),
+        # strategy=DDPStrategy(find_unused_parameters=True),
         max_steps=500000,
         precision=16,
         gradient_clip_val=config.gradient_clip_val,
