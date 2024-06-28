@@ -166,7 +166,7 @@ class PerceiverAttention(nn.Module):
         x = self.norm(x)
         latents = self.norm_latents(latents)
         h = self.num_heads
-        
+
         # get q, k, v
         q = self.to_q(latents)
         if exists(self.latent_to_kv):
@@ -175,7 +175,7 @@ class PerceiverAttention(nn.Module):
             kv_input = torch.cat([self.to_kv(x), self.to_kv(latents)], dim=1)
         k, v = rearrange(kv_input, 'b n (split d) -> split b n d', split=2)
         q, k, v = map(lambda t: rearrange(t, 'b n (h d) -> b h n d', h=h), (q, k, v))
-        
+
         # attention
         attn = einsum('b h i d, b h j d  -> b h i j', self.query_norm(q) * self.scale, self.key_norm(k))
         if exists(mask):
@@ -193,8 +193,8 @@ class PerceiverAttention(nn.Module):
 class EdisonPerceiverAttention(nn.Module):
     def __init__(
         self,
-        dim_input,#d_model
-        dim_latent,#dim_ae
+        dim_input,   # d_model
+        dim_latent,  # dim_ae
         *,
         dim_head=64,
         qk_norm=True,
@@ -218,12 +218,12 @@ class EdisonPerceiverAttention(nn.Module):
         latents_c1 = self.norm_latents(latents_c1)
         latents_c0 = self.norm_latents(latents_c0)
         h = self.num_heads
-        
+
         # get q, k, v
         q_c1 = self.to_q(latents_c1)
         q_c0 = self.to_q(latents_c0)
         kv_input = self.to_kv(x)
-        #TODO: 필요한가? (원래 perceiver에서는 없었고, edison에서는 이것 때문에 consciousness mask가 맞지 않게 됨)
+        # TODO: 필요한가? (원래 perceiver에서는 없었고, edison에서는 이것 때문에 consciousness mask가 맞지 않게 됨)
         # if exists(self.latent_to_kv):
         #     kv_input = torch.cat([self.to_kv(x), self.latent_to_kv(latents_c1)], dim=1)
         # else:
@@ -233,7 +233,7 @@ class EdisonPerceiverAttention(nn.Module):
         q_c0 = rearrange(q_c0, 'b n (h d) -> b h n d', h=h)
         k = rearrange(k, 'b n (h d) -> b h n d', h=h)
         v = rearrange(v, 'b n (h d) -> b h n d', h=h)
-        
+
         # attention
         attn_c1 = einsum('b h i d, b h j d  -> b h i j', self.query_norm(q_c1) * self.scale, self.key_norm(k))
         attn_c0 = einsum('b h i d, b h j d  -> b h i j', self.query_norm(q_c0) * self.scale, self.key_norm(k))
@@ -270,7 +270,7 @@ class PerceiverResampler(nn.Module):
         super().__init__()
         self.pos_emb = AbsolutePositionalEmbedding(dim_input, max_seq_len)
         self.latents = nn.Parameter(torch.randn(num_latents, dim_latent))
-        nn.init.normal_(self.latents, std = 0.02)
+        nn.init.normal_(self.latents, std=0.02)
         self.layers = nn.ModuleList([])
         for _ in range(num_layers):
             self.layers.append(nn.ModuleList([
@@ -292,6 +292,7 @@ class PerceiverResampler(nn.Module):
         latents = self.l2_normalize_latents(latents)
         return latents
 
+
 class EdisonPerceiverResampler(nn.Module):
     def __init__(
         self,
@@ -309,7 +310,7 @@ class EdisonPerceiverResampler(nn.Module):
         self.pos_emb = AbsolutePositionalEmbedding(dim_input, max_seq_len)
         self.latents_c1 = nn.Parameter(torch.randn(num_latents, dim_latent))
         self.latents_c0 = nn.Parameter(torch.randn(num_latents, dim_latent))
-        nn.init.normal_(self.latents_c1, std = 0.02)
+        nn.init.normal_(self.latents_c1, std=0.02)
         self.layers = nn.ModuleList([])
         for _ in range(num_layers):
             self.layers.append(nn.ModuleList([

@@ -81,6 +81,7 @@ class TrainFunction:
         6. train
         """
         # 1-2. load pretrained LM and AE
+        # TODO: init 후 checkpoint 가져오는 방식 때문에 훈련 시 DDP 에러 있는 듯 -> 수정 필요
         checkpoint_path = kwargs.get('ae_checkpoint_path', None)
         lm, tokenizer = get_BART()
         ae = PerceiverAutoEncoder(
