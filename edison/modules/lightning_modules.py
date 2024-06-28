@@ -240,8 +240,7 @@ class EdisonAE(L.LightningModule):
         encoder_outputs['last_hidden_state'] = ae_decoder_outputs['latents_c0']
         outputs_c0 = self.lm(labels=targets_c0, encoder_outputs=encoder_outputs)
         loss_c1 = outputs_c1.loss
-        # loss_c0 = outputs_c0.loss
-        # loss = loss_c1 + loss_c0
+        loss_c0 = outputs_c0.loss
         loss = loss_c1 + loss_c0
         # print(f"loss: {loss}")
         self.log('loss', loss, on_step=True, prog_bar=True)
