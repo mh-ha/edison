@@ -316,7 +316,7 @@ class EdisonGaussianDiffusion(nn.Module):
     @torch.no_grad()
     def ddpm_sample(
         self,
-        shape,
+        batch_size,
         lengths,
         class_id,
         seq2seq_cond,
@@ -326,8 +326,9 @@ class EdisonGaussianDiffusion(nn.Module):
         invert=False,
         z_t=None,
     ):
-        batch, device = shape[0], next(self.embedding_diffusion_model.parameters()).device
-        time_pairs = self.get_sampling_timesteps(batch, device, invert)
+        shape = (batch_size, self.max_seq_len, self.latent_dim)
+        device = next(self.embedding_diffusion_model.parameters()).device
+        time_pairs = self.get_sampling_timesteps(batch_size, device, invert)
         z_t = torch.randn(shape, device=device) if z_t is None else z_t
         mask = self._create_mask(shape, lengths, device)
         x_start = None
@@ -352,27 +353,6 @@ class EdisonGaussianDiffusion(nn.Module):
             z_t = z_t + (torch.sqrt(1 - alpha_now) * noise)
 
         return z_t, mask
-
-    @torch.no_grad()
-    def sample(
-        self,
-        batch_size,
-        length,
-        class_id=None,
-        seq2seq_cond=None,
-        seq2seq_cond_mask=None,
-        cls_free_guidance=1.0,
-        l2_normalize=False
-    ):
-        return self.ddpm_sample(
-            (batch_size, self.max_seq_len, self.latent_dim),
-            length,
-            class_id,
-            seq2seq_cond,
-            seq2seq_cond_mask,
-            cls_free_guidance,
-            l2_normalize,
-        )
 
     @property
     def loss_fn(self):
