@@ -1,50 +1,9 @@
-"""
-    LM Encoder      (batch, seq_len_lm, d_model)
-    -> AE Encoder   (batch, seq_len_ae=32, d_ae=64)
-    -> Diffusion    (batch, seq_len_ae, d_ae) (내부적으로 dimention for diffusion 있음)
-    -> AE Decoder   (batch, seq_len_ae, d_ae)
-    -> LM Decoder   (batch, seq_len, d_model)
-    
-edison
-    - embed -> LM : c=0 무시
-    - -> AE -> latent
-        1. only sentence
-        2. sentence with buffer together
-        3. sentence and buffer seperately
-    - -> Diffusion
-        context diffusion       (batch, seq_len_ae, d_ae) -> (batch, seq_len_ae, d_diff) -> (batch, seq_len_ae, d_ae)
-        embedding diffusion     (batch, seq_len_lm, d_embed(=d_model?)) -> (batch, seq_len_lm, d_diff) -> (batch, seq_len_lm, d_embed(=d_model?))
-
-TODO
-    1. data to xt_data logic    ##TODO 구현 완료, 테스트 필요
-        result: input_ids that replace pad_ids to sampled buffer words
-    2. build LM, AE -> LM은 그대로 써도 됨, AE는 조정 필요(sentence 부분, buffer 부분 나눠서 계산하는 로직 등 옵션 3개) ##TODO 구현 완료, 테스트 필요
-        result: AE with 3 options
-    3. build Diffusions -> LD4LG와 비슷한 것, embedding을 위한 것 각각  ##TODO 구현 완료, 테스트 필요
-        result: context diffusion, embedding diffusion
-    4. processing Diffusions together -> 여러 개의 옵션 중 하나 선택 가능하도록 ##TODO 일부(same) 구현 완료, 테스트 필요
-        result: diffusion training logic
-            same: context, embedding 동시에 처리 (이전 context, embedding latent 사용, seq2seq_cond로 사용 -> cross attention)
-            context_first: context 먼저 처리, embedding은 context latent 사용
-            alternately: context, embedding 번갈아가면서 처리
-            
-    5. p, c 처리 로직
-        1) XT-attention (like disentangle transformer) 구현     ##TODO 구현 완료, 테스트 필요
-        2) PE: RPE, CPE 구현    
-        https://www.notion.so/Edison-c16538b822a14728bb8dddba142a83de?pvs=4#e389c1f15c6e4212b4884f92b93b1463
-        result: word, p, c, processing logic
-"""
-
-
 import lightning as L
 import torch
-from torch import nn
-from einops import repeat
 
 from ..config.config import Config
 from .diffusion import GaussianDiffusion
 from .edison_diffusion import EdisonGaussianDiffusion
-from .positional_embedding import SinusoidalPosEmb, ConsciousnessEmbedding
 
 
 class LD4LGAE(L.LightningModule):
@@ -277,7 +236,6 @@ class EdisonDiffusion(L.LightningModule):
 
         embedding_latents_mask = attention_mask
         context_latents_mask = torch.ones(context_latents.shape[:2]).to(context_latents.device)
-        # print(embedding_latents.shape, context_latents.shape, embedding_latents_mask.shape, context_latents_mask.shape)
         loss = self.diffusion_model(
             embedding_latents=embedding_latents,
             context_latents=context_latents,
@@ -304,3 +262,11 @@ class EdisonDiffusion(L.LightningModule):
             'optimizer': optimizer,
             'lr_scheduler': scheduler,
         }
+
+    def generate(self, embedding_latents, context_latents, attention_mask, class_id=None):
+        return self.diffusion_model.generate(
+            embedding_latents=embedding_latents,
+            context_latents=context_latents,
+            attention_mask=attention_mask,
+            class_id=class_id,
+        )

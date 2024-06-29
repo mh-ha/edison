@@ -159,7 +159,7 @@ class DiffusionTransformer(nn.Module):
         z_t = self.norm(z_t)
         z_t = self.output_proj(z_t)
         main_latents = z_t
-        
+
         return main_latents
 
     def _build_context(self, seq2seq_cond, seq2seq_cond_mask, batch_size, device):
@@ -176,11 +176,8 @@ class DiffusionTransformer(nn.Module):
         return context, context_mask
 
 
-
-
-
 class EdisonGaussianDiffusion(nn.Module):
-    def __init__(self, config:Config):
+    def __init__(self, config: Config):
         super().__init__()
         self.config = config
         self._initialize_diffusion_model(config)
@@ -192,10 +189,15 @@ class EdisonGaussianDiffusion(nn.Module):
         self.l2_normalize = False
         self.loss_type = config.loss_type
         self.objective = config.objective
-        if self.embedding_diffusion_model.class_conditional and self.embedding_diffusion_model.class_unconditional_prob > 0:
-            self.class_unconditional_bernoulli = torch.distributions.Bernoulli(probs=self.embedding_diffusion_model.class_unconditional_prob)
+        if (
+            self.embedding_diffusion_model.class_conditional
+            and self.embedding_diffusion_model.class_unconditional_prob > 0
+        ):
+            self.class_unconditional_bernoulli = torch.distributions.Bernoulli(
+                probs=self.embedding_diffusion_model.class_unconditional_prob
+            )
 
-    def _initialize_diffusion_model(self, config:Config) -> DiffusionTransformer:
+    def _initialize_diffusion_model(self, config: Config) -> DiffusionTransformer:
         self.embedding_diffusion_model = DiffusionTransformer(
             tx_dim=config.tx_dim,
             tx_depth=config.tx_depth,
@@ -234,13 +236,12 @@ class EdisonGaussianDiffusion(nn.Module):
             num_dense_connections=config.num_dense_connections,
             is_context_diffusion=True,
         )
-        
 
-    def _initialize_buffers(self, config:Config):
+    def _initialize_buffers(self, config: Config):
         self.register_buffer('latent_mean', torch.zeros(config.latent_dim, dtype=torch.float32))
         self.register_buffer('latent_scale', torch.tensor(1, dtype=torch.float32))
 
-    def _initialize_schedules(self, config:Config):
+    def _initialize_schedules(self, config: Config):
         self.train_schedule = partial(time_to_alpha, alpha_schedule=cosine_schedule, scale=config.scale)
         self.sampling_schedule = partial(time_to_alpha, alpha_schedule=cosine_schedule, scale=config.scale)
         self.sampling_timesteps = config.sampling_timesteps
@@ -292,11 +293,6 @@ class EdisonGaussianDiffusion(nn.Module):
             main_latents_mask=main_latents_mask,
             sub_latents_mask=sub_latents_mask,
         )
-        # print(f"main_latents:{main_latents.shape}, model_output: {model_output.shape}")
-        # if cls_free_guidance != 1.0:
-        #     unc_class_id = torch.full_like(class_id, fill_value=self.diffusion_model.num_classes) if class_id is not None else None
-        #     unc_model_output = self.diffusion_model(context_latents, mask, time_cond, context_self_cond, class_id=unc_class_id)
-        #     model_output = model_output * cls_free_guidance + unc_model_output * (1 - cls_free_guidance)
         return self._process_model_output(main_latents, times, model_output, sampling, l2_normalize)
 
     def _process_model_output(self, z_t, t, model_output, sampling, l2_normalize):
@@ -318,11 +314,23 @@ class EdisonGaussianDiffusion(nn.Module):
         return times.unbind(dim=-1)
 
     @torch.no_grad()
-    def ddpm_sample(self, shape, lengths, class_id, seq2seq_cond, seq2seq_cond_mask, cls_free_guidance=1.0, l2_normalize=False, invert=False, z_t=None):
+    def ddpm_sample(
+        self,
+        shape,
+        lengths,
+        class_id,
+        seq2seq_cond,
+        seq2seq_cond_mask,
+        cls_free_guidance=1.0,
+        l2_normalize=False,
+        invert=False,
+        z_t=None,
+    ):
         batch, device = shape[0], next(self.embedding_diffusion_model.parameters()).device
         time_pairs = self.get_sampling_timesteps(batch, device, invert)
         z_t = torch.randn(shape, device=device) if z_t is None else z_t
         mask = self._create_mask(shape, lengths, device)
+        x_start = None
 
         for time, time_next in tqdm(time_pairs, desc='sampling loop time step', total=self.sampling_timesteps):
             model_output = self.diffusion_model_predictions(
@@ -334,19 +342,37 @@ class EdisonGaussianDiffusion(nn.Module):
             alpha_now = alpha / alpha_next
             x_start = model_output.pred_x_start
             eps = model_output.pred_noise
-            
+
             if time_next[0] <= 0:
                 z_t = x_start
                 continue
-            
+
             noise = torch.randn_like(z_t)
-            z_t = (1 / alpha_now.sqrt() * (z_t - (1 - alpha_now) / (1 - alpha).sqrt() * eps) + torch.sqrt(1 - alpha_now) * noise)
+            z_t = 1 / alpha_now.sqrt() * (z_t - (1 - alpha_now) / (1 - alpha).sqrt() * eps)
+            z_t = z_t + (torch.sqrt(1 - alpha_now) * noise)
 
         return z_t, mask
 
     @torch.no_grad()
-    def sample(self, batch_size, length, class_id=None, seq2seq_cond=None, seq2seq_cond_mask=None, cls_free_guidance=1.0, l2_normalize=False):
-        return self.ddpm_sample((batch_size, self.max_seq_len, self.latent_dim), length, class_id, seq2seq_cond, seq2seq_cond_mask, cls_free_guidance, l2_normalize)
+    def sample(
+        self,
+        batch_size,
+        length,
+        class_id=None,
+        seq2seq_cond=None,
+        seq2seq_cond_mask=None,
+        cls_free_guidance=1.0,
+        l2_normalize=False
+    ):
+        return self.ddpm_sample(
+            (batch_size, self.max_seq_len, self.latent_dim),
+            length,
+            class_id,
+            seq2seq_cond,
+            seq2seq_cond_mask,
+            cls_free_guidance,
+            l2_normalize,
+        )
 
     @property
     def loss_fn(self):
