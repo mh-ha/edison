@@ -4,6 +4,7 @@ from nltk.util import ngrams
 from collections import defaultdict
 import spacy
 import numpy as np
+from tqdm import tqdm
 
 
 def compute_perplexity(all_texts_list, model_id='gpt2-large'):
@@ -152,3 +153,26 @@ def compute_rouge(all_texts_list, human_references, use_aggregator=True, use_ste
     )
 
     return results
+
+
+def evaluate_model(all_texts_list, human_references, model_id='gpt2-large'):
+    metrics = {}
+    metrics['perplexity'] = compute_perplexity(all_texts_list, model_id)
+    metrics['wordcount'] = compute_wordcount(all_texts_list)
+    metrics.update(compute_diversity(all_texts_list))
+    metrics['memorization'] = compute_memorization(all_texts_list, human_references)
+    metrics['mauve'], metrics['divergence_curve'] = compute_mauve(all_texts_list, human_references, model_id)
+
+    return metrics
+
+
+def generate_samples(model, tokenizer, num_samples, batch_size, seq_len, device):
+    model.to(device)
+    model.eval()
+    generated_texts = []
+    for i in tqdm(range(num_samples, step=batch_size)):
+        with torch.no_grad():
+            output = model.diffusion_model.sample(batch_size, [seq_len]*batch_size)
+            # TODO: output to embedding to text
+            generated_texts.append(tokenizer.decode(output[0], skip_special_tokens=True))
+    return generated_texts

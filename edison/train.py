@@ -107,7 +107,7 @@ class TrainFunction:
         # print(f"debug - model_params : {list(model.ae.parameters())[0]}")
 
         # 3-4. init lightning module using LM, AE, Diffusion
-        diffusion = LD4LGDiffusion(self.config, model)
+        diffusion = LD4LGDiffusion(self.config, model, tokenizer)
 
         # 5. init data loader
         self.dataloader = get_dataloader(
@@ -210,7 +210,7 @@ class TrainFunction:
         # model = EdisonAE(self.config, lm, ae)
 
         # 3-4. init lightning module using LM, AE, Diffusion
-        diffusion = EdisonDiffusion(self.config, model)
+        diffusion = EdisonDiffusion(self.config, model, tokenizer)
 
         # 5. init data loader
         self.dataloader = get_xtdataloader(

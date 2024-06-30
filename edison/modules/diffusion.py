@@ -10,7 +10,6 @@ import torch.nn.functional as F
 import lightning as L
 
 from einops import rearrange, reduce, repeat
-
 from tqdm.auto import tqdm
 
 from edison.config.config import Config
@@ -261,10 +260,12 @@ def set_seeds(seed):
 class GaussianDiffusion(nn.Module):
     def __init__(
         self,
-        config:Config,
-        diffusion_for:str=None,
+        config: Config,
+        diffusion_for: str = None,
+        device: torch.device = None,
     ):
         super().__init__()
+        self.device = default(device, torch.device('cuda' if torch.cuda.is_available() else 'cpu'))
         if diffusion_for is not None:
             assert diffusion_for in {'context', 'embedding'}, 'diffusion_for must be one of context, embedding'
             self.diffusion_mode = config.diffusion_mode
@@ -535,6 +536,3 @@ class GaussianDiffusion(nn.Module):
         if return_x_start:
             return loss.mean(), predictions.pred_x_start
         return loss.mean()
-
-
-

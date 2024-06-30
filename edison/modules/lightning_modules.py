@@ -1,5 +1,12 @@
 import lightning as L
 import torch
+from einops import einsum
+from transformers.modeling_outputs import BaseModelOutput
+from transformers import AutoTokenizer
+from transformers.models.bart.modeling_bart import (
+    BartForConditionalGeneration,
+)
+from tqdm import tqdm
 
 from ..config.config import Config
 from .diffusion import GaussianDiffusion
@@ -50,6 +57,9 @@ class LD4LGAE(L.LightningModule):
         outputs = self.lm(encoder_outputs=decoder_outputs)
         return outputs['logits']
 
+    def get_decoder_input(self, latents):
+        return self.ae.decode(latents)
+
     def training_step(self, batch, batch_idx):
         inputs = batch['input_ids']
         attention_masks = batch['attention_mask']
@@ -92,13 +102,15 @@ class LD4LGDiffusion(L.LightningModule):
         self,
         config: Config,
         autoencoder: LD4LGAE,
+        tokenizer: AutoTokenizer,
     ):
         super().__init__()
         self.save_hyperparameters('config')
         self.config = config
         self.autoencoder = autoencoder
         self.autoencoder.freeze()
-        self.diffusion_model = GaussianDiffusion(config=config)
+        self.tokenizer = tokenizer
+        self.diffusion_model = GaussianDiffusion(config=config, device=self.device)
 
     def forward(self, encoder_outputs, class_id=None):
         mask = torch.ones(
@@ -128,13 +140,27 @@ class LD4LGDiffusion(L.LightningModule):
             'optimizer': optimizer,
             'lr_scheduler': scheduler,
         }
+    
+    @torch.no_grad()
+    def generate(self, num_samples, seq_len, class_id=None, seed=42, batch_size=8):
+        torch.manual_seed(seed)
+        generated_texts = []
+        for i in tqdm(range(0, num_samples, batch_size)):
+            latents, mask = self.diffusion_model.sample(batch_size, [seq_len]*batch_size, class_id=class_id)
+            attention_mask = None
+            encoder_output = BaseModelOutput(last_hidden_state=self.autoencoder.get_decoder_input(latents.clone()))
+            sample_ids = self.autoencoder.lm.generate(encoder_outputs=encoder_output, attention_mask=attention_mask)
+            texts_list = [self.tokenizer.decode(g, skip_special_tokens=True, clean_up_tokenization_spaces=True) for g in sample_ids]
+            texts_list = [text.strip() for text in texts_list if len(text.strip())>0]
+            generated_texts.extend(texts_list)
+        return generated_texts
 
 
 class EdisonAE(L.LightningModule):
     def __init__(
         self,
         config: Config,
-        lm: torch.nn.Module,
+        lm: BartForConditionalGeneration,
         ae: torch.nn.Module,
     ):
         super().__init__()
@@ -219,14 +245,16 @@ class EdisonDiffusion(L.LightningModule):
         self,
         config: Config,
         autoencoder: EdisonAE,
+        tokenizer: AutoTokenizer,
     ):
         super().__init__()
         self.save_hyperparameters('config')
         self.config = config
+        self.tokenizer = tokenizer
         self.autoencoder = autoencoder
         self.autoencoder.freeze()
 
-        self.diffusion_model = EdisonGaussianDiffusion(config=config)
+        self.diffusion_model = EdisonGaussianDiffusion(config=config, device=self.device)
 
     def forward(self, embedding_latents, context_latents, attention_mask, class_id=None):
         # TODO: implement latents_c0 process
@@ -267,10 +295,16 @@ class EdisonDiffusion(L.LightningModule):
             'lr_scheduler': scheduler,
         }
 
-    def generate(self, embedding_latents, context_latents, attention_mask, class_id=None):
-        return self.diffusion_model.generate(
-            embedding_latents=embedding_latents,
-            context_latents=context_latents,
-            attention_mask=attention_mask,
-            class_id=class_id,
-        )
+    @torch.no_grad()
+    def generate(self, num_samples, seq_len, class_id=None, seed=42, batch_size=8):
+        torch.manual_seed(seed)
+        generated_texts = []
+        for i in tqdm(range(0, num_samples, batch_size)):
+            latents, mask = self.diffusion_model.sample(batch_size, [seq_len]*batch_size, class_id=class_id)
+            # decode latents to token_ids
+            sample_ids = einsum(latents, self.autoencoder.lm_input_embeddings.weight, 'b l d, n d -> b l n')
+            sample_ids = sample_ids.argmax(dim=-1)
+            texts_list = [self.tokenizer.decode(g, skip_special_tokens=True, clean_up_tokenization_spaces=True) for g in sample_ids]
+            texts_list = [text.strip() for text in texts_list if len(text.strip())>0]
+            generated_texts.extend(texts_list)
+        return generated_texts

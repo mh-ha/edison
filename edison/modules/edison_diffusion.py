@@ -12,7 +12,7 @@ from tqdm.auto import tqdm
 from edison.config.config import Config, EdisonConfig
 from .positional_embedding import AbsolutePositionalEmbedding
 from .edison_diffusion_layer import Encoder, ContextEncoder
-from .utils import time_to_alpha, cosine_schedule, right_pad_dims_to, init_zero_
+from .utils import time_to_alpha, cosine_schedule, right_pad_dims_to, init_zero_, default
 
 
 ModelPrediction = namedtuple('ModelPrediction', ['pred_noise', 'pred_x_start', 'pred_v'])
@@ -177,8 +177,9 @@ class DiffusionTransformer(nn.Module):
 
 
 class EdisonGaussianDiffusion(nn.Module):
-    def __init__(self, config: EdisonConfig):
+    def __init__(self, config: EdisonConfig, device: torch.device = None):
         super().__init__()
+        self.device = default(device, torch.device('cuda' if torch.cuda.is_available() else 'cpu'))
         self.config = config
         self._initialize_diffusion_model(config)
         self._initialize_buffers(config)
@@ -387,6 +388,32 @@ class EdisonGaussianDiffusion(nn.Module):
             embedding_z_t = embedding_z_t + (torch.sqrt(1 - alpha_now) * embedding_noise)
 
         return embedding_z_t, embedding_mask
+
+    def sample(
+        self,
+        batch_size,
+        lengths,
+        class_id=None,
+        seq2seq_cond=None,
+        seq2seq_cond_mask=None,
+        cls_free_guidance=1.0,
+        l2_normalize=False,
+        invert=False,
+        context_z_t=None,
+        embedding_z_t=None,
+    ):
+        return self.ddpm_sample(
+            batch_size,
+            lengths,
+            class_id=class_id,
+            seq2seq_cond=seq2seq_cond,
+            seq2seq_cond_mask=seq2seq_cond_mask,
+            cls_free_guidance=cls_free_guidance,
+            l2_normalize=l2_normalize,
+            invert=invert,
+            context_z_t=context_z_t,
+            embedding_z_t=embedding_z_t,
+        )
 
     @property
     def loss_fn(self):
