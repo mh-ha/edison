@@ -9,7 +9,7 @@ import torch.nn.functional as F
 from einops import rearrange, reduce, repeat
 from tqdm.auto import tqdm
 
-from edison.config.config import Config
+from edison.config.config import Config, EdisonConfig
 from .positional_embedding import AbsolutePositionalEmbedding
 from .edison_diffusion_layer import Encoder, ContextEncoder
 from .utils import time_to_alpha, cosine_schedule, right_pad_dims_to, init_zero_
@@ -177,7 +177,7 @@ class DiffusionTransformer(nn.Module):
 
 
 class EdisonGaussianDiffusion(nn.Module):
-    def __init__(self, config: Config):
+    def __init__(self, config: EdisonConfig):
         super().__init__()
         self.config = config
         self._initialize_diffusion_model(config)
@@ -197,7 +197,7 @@ class EdisonGaussianDiffusion(nn.Module):
                 probs=self.embedding_diffusion_model.class_unconditional_prob
             )
 
-    def _initialize_diffusion_model(self, config: Config) -> DiffusionTransformer:
+    def _initialize_diffusion_model(self, config: EdisonConfig) -> DiffusionTransformer:
         self.embedding_diffusion_model = DiffusionTransformer(
             tx_dim=config.tx_dim,
             tx_depth=config.tx_depth,
@@ -237,11 +237,11 @@ class EdisonGaussianDiffusion(nn.Module):
             is_context_diffusion=True,
         )
 
-    def _initialize_buffers(self, config: Config):
+    def _initialize_buffers(self, config: EdisonConfig):
         self.register_buffer('latent_mean', torch.zeros(config.latent_dim, dtype=torch.float32))
         self.register_buffer('latent_scale', torch.tensor(1, dtype=torch.float32))
 
-    def _initialize_schedules(self, config: Config):
+    def _initialize_schedules(self, config: EdisonConfig):
         self.train_schedule = partial(time_to_alpha, alpha_schedule=cosine_schedule, scale=config.scale)
         self.sampling_schedule = partial(time_to_alpha, alpha_schedule=cosine_schedule, scale=config.scale)
         self.sampling_timesteps = config.sampling_timesteps
@@ -318,41 +318,75 @@ class EdisonGaussianDiffusion(nn.Module):
         self,
         batch_size,
         lengths,
-        class_id,
-        seq2seq_cond,
-        seq2seq_cond_mask,
+        class_id=None,
+        seq2seq_cond=None,
+        seq2seq_cond_mask=None,
         cls_free_guidance=1.0,
         l2_normalize=False,
         invert=False,
-        z_t=None,
+        context_z_t=None,
+        embedding_z_t=None,
     ):
-        shape = (batch_size, self.max_seq_len, self.latent_dim)
         device = next(self.embedding_diffusion_model.parameters()).device
         time_pairs = self.get_sampling_timesteps(batch_size, device, invert)
-        z_t = torch.randn(shape, device=device) if z_t is None else z_t
-        mask = self._create_mask(shape, lengths, device)
-        x_start = None
+
+        context_shape = (batch_size, self.config.num_encoder_latents, self.latent_dim)
+        context_z_t = torch.randn(context_shape, device=device) if context_z_t is None else context_z_t
+        context_mask = [[True] * length + [False] * (self.config.num_encoder_latents - length) for length in lengths]
+        context_mask = torch.tensor(context_mask, dtype=torch.bool, device=device)
+        context_x_start = None
+        # print(f"context_z_t: {context_z_t.shape}, context_mask: {context_mask.shape}, context_shape: {context_shape}")
+
+        embedding_shape = (batch_size, self.max_seq_len, self.config.tx_dim)
+        embedding_z_t = torch.randn(embedding_shape, device=device) if embedding_z_t is None else embedding_z_t
+        embedding_mask = [[True] * length + [False] * (self.max_seq_len - length) for length in lengths]
+        embedding_mask = torch.tensor(embedding_mask, dtype=torch.bool, device=device)
+        embedding_x_start = None
+        # print(f"embedding_z_t: {embedding_z_t.shape}, embedding_mask: {embedding_mask.shape}, embedding_shape: {embedding_shape}")
 
         for time, time_next in tqdm(time_pairs, desc='sampling loop time step', total=self.sampling_timesteps):
-            model_output = self.diffusion_model_predictions(
-                z_t, mask, time, class_id=class_id, main_self_cond=x_start,
-                sub_latents=seq2seq_cond, context_latents_mask=seq2seq_cond_mask,
-                sampling=True, cls_free_guidance=cls_free_guidance, l2_normalize=l2_normalize
-                )
-            alpha, alpha_next = self._get_alpha(time, True), self._get_alpha(time_next, True)
+            # context_diffusion_model
+            context_output = self.diffusion_model_predictions(
+                context_z_t,
+                context_mask,
+                time,
+                main_self_cond=context_x_start,
+                class_id=class_id,
+                sub_latents=embedding_z_t,
+                sub_latents_mask=embedding_mask,
+                diffusion_model=self.context_diffusion_model,
+            )
+            context_x_start = context_output.pred_x_start
+            context_eps = context_output.pred_noise
+
+            # embedding_diffusion_model
+            embedding_output = self.diffusion_model_predictions(
+                embedding_z_t,
+                embedding_mask,
+                time,
+                main_self_cond=embedding_x_start,
+                class_id=class_id,
+                sub_latents=context_z_t,
+                sub_latents_mask=context_mask,
+                diffusion_model=self.embedding_diffusion_model,
+            )
+            embedding_x_start = embedding_output.pred_x_start
+            embedding_eps = embedding_output.pred_noise
+
+            alpha, alpha_next = self._get_alpha(context_z_t, time, True), self._get_alpha(context_z_t, time_next, True)
             alpha_now = alpha / alpha_next
-            x_start = model_output.pred_x_start
-            eps = model_output.pred_noise
 
             if time_next[0] <= 0:
-                z_t = x_start
+                embedding_z_t = embedding_x_start
                 continue
+            context_noise = torch.randn_like(context_z_t)
+            context_z_t = 1 / alpha_now.sqrt() * (context_z_t - (1 - alpha_now) / (1 - alpha).sqrt() * context_eps)
+            context_z_t = context_z_t + (torch.sqrt(1 - alpha_now) * context_noise)
+            embedding_noise = torch.randn_like(embedding_z_t)
+            embedding_z_t = 1 / alpha_now.sqrt() * (embedding_z_t - (1 - alpha_now) / (1 - alpha).sqrt() * embedding_eps)
+            embedding_z_t = embedding_z_t + (torch.sqrt(1 - alpha_now) * embedding_noise)
 
-            noise = torch.randn_like(z_t)
-            z_t = 1 / alpha_now.sqrt() * (z_t - (1 - alpha_now) / (1 - alpha).sqrt() * eps)
-            z_t = z_t + (torch.sqrt(1 - alpha_now) * noise)
-
-        return z_t, mask
+        return embedding_z_t, embedding_mask
 
     @property
     def loss_fn(self):

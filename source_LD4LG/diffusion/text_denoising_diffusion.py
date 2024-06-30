@@ -390,7 +390,7 @@ class GaussianDiffusion(nn.Module):
         latent=None
         if self.using_latent_model:
             mask = torch.ones((shape[0], shape[1]), dtype=torch.bool, device=device)
-        else:    
+        else:
             mask = [[True]*length + [False]*(self.max_seq_len-length) for length in lengths]
             mask = torch.tensor(mask, dtype=torch.bool, device=device)
 
@@ -879,7 +879,15 @@ class Trainer(object):
         # Loop until enough senetences have been generated across all strategies 
         while min([len(all_texts_lists[ele]) for ele in all_texts_lists]) < num_samples:
             batches = num_to_groups(num_samples-min([len(all_texts_lists[ele]) for ele in all_texts_lists]), max(self.eval_batch_size,self.train_batch_size))
-            model_outputs = list(map(lambda n: tuple(x.to('cpu') for x in self.ema.ema_model.sample(batch_size=n, length=self.length_categorical.sample((n,)), class_id=get_class_id(n), cls_free_guidance=cls_free_guidance)), batches))
+            model_outputs = list(map(
+                lambda n: tuple(x.to('cpu') for x in self.ema.ema_model.sample(
+                    batch_size=n,
+                    length=self.length_categorical.sample((n,)),
+                    class_id=get_class_id(n),
+                    cls_free_guidance=cls_free_guidance,
+                )),
+                batches
+            ))
             
             for (latents, mask) in model_outputs:
                 latents, mask = latents.to(device), mask.to(device)

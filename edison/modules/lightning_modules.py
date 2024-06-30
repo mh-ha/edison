@@ -250,7 +250,11 @@ class EdisonDiffusion(L.LightningModule):
         inputs = batch['input_ids']
         attention_mask = batch['attention_mask']
         class_id = batch['label'] if 'label' in batch else None
+        # print(f"inputs: {inputs.shape} attention_mask: {attention_mask.shape} class_id: {class_id}")
         context_latents, embedding_latents = self.autoencoder.encode(inputs, attention_mask, return_embeddings=True)
+        # print(f"context_latents: {context_latents} \nembedding_latents: {embedding_latents}")
+        # print(f"context_latents_c1: {context_latents['latents_c1'].shape} embedding_latents_c1: {embedding_latents.shape}")
+        # print(f"context_latents_c0: {context_latents['latents_c0'].shape}")
         loss = self(embedding_latents, context_latents, attention_mask, class_id)
         self.log('loss', loss, on_step=True, prog_bar=True)
         return loss

@@ -425,7 +425,7 @@ class GaussianDiffusion(nn.Module):
         return times
 
     @torch.no_grad()
-    def ddpm_sample(self, shape, lengths, class_id, seq2seq_cond, seq2seq_mask, cls_free_guidance=1.0, l2_normalize=False, invert=False, z_t=None):
+    def ddpm_sample(self, shape, lengths, class_id=None, seq2seq_cond=None, seq2seq_mask=None, cls_free_guidance=1.0, l2_normalize=False, invert=False, z_t=None):
         batch, device = shape[0], next(self.diffusion_model.parameters()).device
 
         time_pairs = self.get_sampling_timesteps(batch, device = device)
@@ -435,11 +435,8 @@ class GaussianDiffusion(nn.Module):
 
         x_start = None
         latent=None
-        if self.using_latent_model:
-            mask = torch.ones((shape[0], shape[1]), dtype=torch.bool, device=device)
-        else:    
-            mask = [[True]*length + [False]*(self.max_seq_len-length) for length in lengths]
-            mask = torch.tensor(mask, dtype=torch.bool, device=device)
+        mask = [[True]*length + [False]*(self.max_seq_len-length) for length in lengths]
+        mask = torch.tensor(mask, dtype=torch.bool, device=device)
 
         for time, time_next in tqdm(time_pairs, desc = 'sampling loop time step', total = self.sampling_timesteps):
             # get predicted x0
