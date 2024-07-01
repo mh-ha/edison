@@ -23,14 +23,15 @@ os.environ["TOKENIZERS_PARALLELISM"] = "false"
 
 
 class TrainFunction:
-    def __init__(self, config: Config):
+    def __init__(self, config: Config, **kwargs):
         self.config = config
         """
         0. init lightning trainer
         1. load data along with config.train_data
         2. init lightning data module
         """
-        self.trainer = get_trainer(config)
+        debug = kwargs.get('debug', None)
+        self.trainer = get_trainer(config, debug=debug)
         self.dataset = get_dataset(config.dataset_name)
 
     def train_LD4LG_AE(self, **kwargs):
@@ -173,6 +174,7 @@ class TrainFunction:
         """
         # 1-2. load pretrained LM and AE
         checkpoint_path = kwargs.get('ae_checkpoint_path', None)
+        debug = kwargs.get('debug', False)
         lm, tokenizer = get_BART()
         ae = EdisonPerceiverAutoEncoder(
             dim_lm=self.config.dim_lm,
@@ -227,7 +229,10 @@ class TrainFunction:
 
 
 def main(config: Config, **kwargs):
-    train_function = TrainFunction(config)
+    debug = kwargs.get('debug', None)
+    if debug:
+        print("##### Debug Mode #####")
+    train_function = TrainFunction(config, debug=debug)
     if config.model_name == 'LD4LG':
         if config.train_for == 'AE':
             train_function.train_LD4LG_AE(**kwargs)

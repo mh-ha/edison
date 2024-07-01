@@ -5,7 +5,7 @@ from .config.config import Config
 
 
 # TODO: 상세하게 구현
-def get_trainer(config: Config):
+def get_trainer(config: Config, debug=None):
     trainer = L.Trainer(
         # max_epochs=10,
         # strategy=DDPStrategy(find_unused_parameters=True),
@@ -17,6 +17,7 @@ def get_trainer(config: Config):
         accumulate_grad_batches=config.gradient_accumulation_steps,
         num_sanity_val_steps=0,
         log_every_n_steps=50,
+        profiler=debug,
         # callbacks=[checkpoint_callback],
         # resume_from_checkpoint='path/to/checkpoint.ckpt',
         # auto_lr_find=True,
