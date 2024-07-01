@@ -7,10 +7,9 @@ from .config.config import Config
 # TODO: 상세하게 구현
 def get_trainer(config: Config, debug=None):
     trainer = L.Trainer(
-        # max_epochs=10,
         strategy=DDPStrategy(find_unused_parameters=True),
-        # strategy='ddp_find_unused_parameters_true',
-        max_steps=500000,
+        max_epochs=1,
+        # max_steps=500000,
         precision=16,
         gradient_clip_val=config.gradient_clip_val,
         gradient_clip_algorithm=config.gradient_clip_algorithm,
