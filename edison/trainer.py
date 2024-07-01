@@ -1,5 +1,6 @@
 import lightning as L
 from lightning.pytorch.strategies import DDPStrategy
+from lightning.pytorch.profilers import PyTorchProfiler
 
 from .config.config import Config
 
@@ -16,7 +17,8 @@ def get_trainer(config: Config, debug=None):
         accumulate_grad_batches=config.gradient_accumulation_steps,
         num_sanity_val_steps=0,
         log_every_n_steps=50,
-        profiler=debug,
+        # profiler=debug,
+        profiler=PyTorchProfiler(),
         # callbacks=[checkpoint_callback],
         # resume_from_checkpoint='path/to/checkpoint.ckpt',
         # auto_lr_find=True,
