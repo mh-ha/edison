@@ -10,6 +10,7 @@ def get_trainer(config: Config, debug=None):
     trainer = L.Trainer(
         strategy=DDPStrategy(find_unused_parameters=True),
         max_epochs=1,
+        num_nodes=4,
         # max_steps=500000,
         precision=16,
         gradient_clip_val=config.gradient_clip_val,
