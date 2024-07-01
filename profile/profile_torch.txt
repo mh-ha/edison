@@ -1,0 +1,27 @@
+Profile stats for: records rank: 0
+-------------------------------------------------------  ------------  ------------  ------------  ------------  ------------  ------------  ------------  ------------  ------------  ------------  
+                                                   Name    Self CPU %      Self CPU   CPU total %     CPU total  CPU time avg     Self CUDA   Self CUDA %    CUDA total  CUDA time avg    # of Calls  
+-------------------------------------------------------  ------------  ------------  ------------  ------------  ------------  ------------  ------------  ------------  ------------  ------------  
+                                          ProfilerStep*         7.37%        1.305s        44.90%        7.952s        2.651s       0.000us         0.00%     329.051ms     109.684ms             3  
+            [pl][profile][Strategy]DDPStrategy.backward        33.97%        6.017s        34.07%        6.034s        2.011s       0.000us         0.00%       4.663ms       1.554ms             3  
+                                            aten::copy_         0.81%     143.705ms        29.98%        5.309s     376.848us     272.790ms         1.01%     273.307ms      19.400us         14088  
+                                        cudaMemcpyAsync        28.69%        5.081s        28.69%        5.081s       1.950ms       0.000us         0.00%       0.000us       0.000us          2606  
+                        [pl][profile]run_training_batch         0.04%       7.048ms        24.48%        4.335s        1.445s       0.000us         0.00%     329.710ms     109.903ms             3  
+[pl][profile][LightningModule]EdisonDiffusion.optimi...        14.87%        2.633s        24.44%        4.328s        1.443s       0.000us         0.00%     329.710ms     109.903ms             3  
+       [pl][profile][Strategy]DDPStrategy.training_step         0.01%       1.549ms         9.57%        1.695s     564.922ms       0.000us         0.00%     521.401ms     173.800ms             3  
+                        DistributedDataParallel.forward         0.06%      11.254ms         9.56%        1.693s     564.405ms       0.000us         0.00%     521.401ms     173.800ms             3  
+[pl][module]edison.modules.edison_diffusion.EdisonGa...         0.04%       7.569ms         8.99%        1.592s     530.654ms       0.000us         0.00%     484.416ms     161.472ms             3  
+[pl][module]edison.modules.edison_diffusion.Diffusio...         0.01%       1.111ms         5.49%     972.145ms     194.429ms       0.000us         0.00%     278.266ms      55.653ms             5  
+[pl][module]edison.modules.edison_diffusion_layer.En...         0.07%      12.843ms         5.44%     963.091ms     192.618ms       0.000us         0.00%     275.233ms      55.047ms             5  
+                                           aten::linear         0.15%      26.864ms         4.13%     731.003ms     128.269us       0.000us         0.00%     347.580ms      60.990us          5699  
+[pl][module]edison.modules.edison_diffusion.Diffusio...         0.01%       1.200ms         3.24%     573.043ms      95.507ms       0.000us         0.00%     202.313ms      33.719ms             6  
+[pl][module]edison.modules.edison_diffusion_layer.En...         0.08%      14.463ms         3.18%     563.246ms      93.874ms       0.000us         0.00%     200.922ms      33.487ms             6  
+                                             cudaMalloc         2.74%     484.656ms         2.74%     484.656ms       4.446ms       0.000us         0.00%       0.000us       0.000us           109  
+                                           aten::einsum         0.23%      40.081ms         2.28%     404.478ms     258.123us       0.000us         0.00%     115.761ms      73.874us          1567  
+                                               aten::to         0.11%      18.697ms         1.87%     331.912ms      30.953us       0.000us         0.00%     137.777ms      12.849us         10723  
+                                         aten::_to_copy         0.21%      36.370ms         1.82%     322.577ms      40.398us       0.000us         0.00%     142.882ms      17.894us          7985  
+                                               aten::mm         0.79%     139.821ms         1.50%     265.169ms      58.809us     257.622ms         0.95%     258.436ms      57.316us          4509  
+                                          aten::reshape         0.17%      29.767ms         1.48%     262.616ms      17.259us       0.000us         0.00%     111.699ms       7.341us         15216  
+-------------------------------------------------------  ------------  ------------  ------------  ------------  ------------  ------------  ------------  ------------  ------------  ------------  
+Self CPU time total: 17.711s
+Self CUDA time total: 27.007s
