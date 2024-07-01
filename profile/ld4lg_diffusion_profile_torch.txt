@@ -1,0 +1,27 @@
+Profile stats for: records rank: 0
+-------------------------------------------------------  ------------  ------------  ------------  ------------  ------------  ------------  ------------  ------------  ------------  ------------  
+                                                   Name    Self CPU %      Self CPU   CPU total %     CPU total  CPU time avg     Self CUDA   Self CUDA %    CUDA total  CUDA time avg    # of Calls  
+-------------------------------------------------------  ------------  ------------  ------------  ------------  ------------  ------------  ------------  ------------  ------------  ------------  
+                                          ProfilerStep*         8.79%     247.493ms        50.17%        1.413s     471.082ms       0.000us         0.00%      71.521ms      23.840ms             3  
+                        [pl][profile]run_training_batch         0.06%       1.819ms        37.96%        1.069s     356.409ms       0.000us         0.00%      66.547ms      22.182ms             3  
+[pl][profile][LightningModule]LD4LGDiffusion.optimiz...        25.78%     726.147ms        37.89%        1.067s     355.790ms       0.000us         0.00%      66.547ms      22.182ms             3  
+                                             aten::item         0.05%       1.466ms        19.16%     539.828ms     221.060us       0.000us         0.00%     428.000us       0.175us          2442  
+                              aten::_local_scalar_dense         0.13%       3.531ms        19.11%     538.442ms     220.492us     432.000us         0.01%     432.000us       0.177us          2442  
+                                  cudaStreamSynchronize        18.87%     531.582ms        18.90%     532.333ms       1.292ms       0.000us         0.00%       0.000us       0.000us           412  
+            [pl][profile][Strategy]DDPStrategy.backward        17.20%     484.604ms        17.30%     487.240ms     162.413ms       0.000us         0.00%      24.000us       8.000us             3  
+       [pl][profile][Strategy]DDPStrategy.training_step         0.02%     574.000us        12.11%     341.155ms     113.718ms       0.000us         0.00%      93.444ms      31.148ms             3  
+                        DistributedDataParallel.forward         0.23%       6.389ms        12.09%     340.581ms     113.527ms       0.000us         0.00%      93.444ms      31.148ms             3  
+[pl][module]edison.modules.diffusion.GaussianDiffusi...         0.77%      21.746ms         9.08%     255.801ms      85.267ms       0.000us         0.00%      59.411ms      19.804ms             3  
+                                            aten::copy_         1.40%      39.359ms         8.45%     238.154ms      56.261us      58.434ms         1.25%      59.278ms      14.004us          4233  
+                                        cudaMemcpyAsync         6.52%     183.713ms         6.52%     183.717ms      92.320us     554.000us         0.01%     554.000us       0.278us          1990  
+[pl][module]edison.modules.diffusion.DiffusionTransf...         0.03%     978.000us         6.13%     172.671ms      43.168ms       0.000us         0.00%      56.008ms      14.002ms             4  
+[pl][module]edison.modules.diffusion_layer.Encoder: ...         0.26%       7.400ms         5.84%     164.456ms      41.114ms       0.000us         0.00%      54.863ms      13.716ms             4  
+                                           aten::linear         0.32%       9.064ms         4.11%     115.793ms     112.969us       0.000us         0.00%      77.279ms      75.394us          1025  
+                                               aten::to         0.19%       5.379ms         2.53%      71.187ms      24.025us       0.000us         0.00%      24.112ms       8.138us          2963  
+                                         aten::_to_copy         0.34%       9.692ms         2.43%      68.523ms      30.880us       0.000us         0.00%      25.852ms      11.650us          2219  
+                                       cudaLaunchKernel         2.43%      68.365ms         2.43%      68.378ms       6.852us       2.556ms         0.05%       2.556ms       0.256us          9980  
+[pl][module]transformers.models.bart.modeling_bart.B...         0.04%       1.224ms         1.51%      42.554ms      14.185ms       0.000us         0.00%      23.801ms       7.934ms             3  
+autograd::engine::evaluate_function: torch::autograd...         0.31%       8.617ms         1.27%      35.738ms      71.619us       0.000us         0.00%     748.685ms       1.500ms           499  
+-------------------------------------------------------  ------------  ------------  ------------  ------------  ------------  ------------  ------------  ------------  ------------  ------------  
+Self CPU time total: 2.817s
+Self CUDA time total: 4.676s
