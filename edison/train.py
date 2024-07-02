@@ -174,7 +174,6 @@ class TrainFunction:
         """
         # 1-2. load pretrained LM and AE
         checkpoint_path = kwargs.get('ae_checkpoint_path', None)
-        debug = kwargs.get('debug', False)
         lm, tokenizer = get_BART()
         ae = EdisonPerceiverAutoEncoder(
             dim_lm=self.config.dim_lm,
