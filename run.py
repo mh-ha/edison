@@ -1,8 +1,8 @@
 import argparse
 import warnings
 
-from edison.config.config import EdisonConfig, LD4LGConfig
-from edison.train import main as train_main
+from edison.configs.config import EdisonConfig, LD4LGConfig
+from edison.pipes.train import main as train_main
 
 warnings.filterwarnings("ignore")
 

@@ -8,7 +8,7 @@ from transformers.models.bart.modeling_bart import (
 )
 from tqdm import tqdm
 
-from ..config.config import Config
+from ..configs.config import Config
 from .diffusion import GaussianDiffusion
 from .edison_diffusion import EdisonGaussianDiffusion
 

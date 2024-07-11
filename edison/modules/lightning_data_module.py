@@ -9,13 +9,12 @@ from torch.utils.data import DataLoader
 import lightning as L
 from datasets import load_dataset
 from torch.utils.data import DataLoader
-from transformers import PreTrainedTokenizerBase, default_data_collator
+from transformers import PreTrainedTokenizerBase
 from torch.utils.data import DataLoader
-from transformers import AutoTokenizer, BatchEncoding, PreTrainedTokenizerBase
-from transformers.models.bart.modeling_bart import BartForConditionalGeneration, shift_tokens_right
+from transformers import BatchEncoding, PreTrainedTokenizerBase
+from transformers.models.bart.modeling_bart import shift_tokens_right
 
-from ..config.config import Config
-from .tokens import TokenConverter
+from ..configs.config import Config
 
 def get_dataset(dataset_name, data_path=None):
     if dataset_name == 'roc':
