@@ -8,9 +8,9 @@ from transformers.models.bart.modeling_bart import (
 )
 from tqdm import tqdm
 
-from ..configs.config import Config
-from .diffusion import GaussianDiffusion
-from .edison_diffusion import EdisonGaussianDiffusion
+from edison.configs.config import Config
+from edison.layers.diffusion import GaussianDiffusion
+from edison.layers.edison_diffusion import EdisonGaussianDiffusion
 
 
 class LD4LGAE(L.LightningModule):

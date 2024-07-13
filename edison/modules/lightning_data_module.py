@@ -14,12 +14,12 @@ from torch.utils.data import DataLoader
 from transformers import BatchEncoding, PreTrainedTokenizerBase
 from transformers.models.bart.modeling_bart import shift_tokens_right
 
-from ..configs.config import Config
+from edison.configs.config import Config
 
 def get_dataset(dataset_name, data_path=None):
     if dataset_name == 'roc':
         if data_path is None:
-            data_path = 'edison/datasets/ROCstory'
+            data_path = 'edison/resources/datasets/ROCstory'
         dataset = load_dataset("text", data_files={f'{split}': os.path.join(data_path, f'roc_{split}.json') for split in ['train', 'valid']})
         dataset = process_roc_dataset(dataset)
     elif dataset_name == 'ag_news':

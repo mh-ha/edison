@@ -1,14 +1,14 @@
 import math
-
-import torch
-from torch import nn, einsum
-import torch.nn.functional as F
 from functools import partial, wraps
 from inspect import isfunction
 from collections import namedtuple
 
+import torch
+from torch import nn, einsum
+import torch.nn.functional as F
 from einops import rearrange, repeat, reduce
 from einops.layers.torch import Rearrange
+
 
 DEFAULT_DIM_HEAD = 64
 

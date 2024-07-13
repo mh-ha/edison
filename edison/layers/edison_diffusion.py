@@ -10,8 +10,8 @@ from einops import rearrange, reduce, repeat
 from tqdm.auto import tqdm
 
 from edison.configs.config import EdisonConfig
-from .edison_diffusion_layer import Encoder
-from .utils import time_to_alpha, cosine_schedule, right_pad_dims_to, init_zero_, default
+from edison.layers.edison_diffusion_layer import Encoder
+from edison.utils.utils import time_to_alpha, cosine_schedule, right_pad_dims_to, init_zero_, default
 
 
 ModelPrediction = namedtuple('ModelPrediction', ['pred_noise', 'pred_x_start', 'pred_v'])

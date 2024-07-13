@@ -8,13 +8,12 @@ import torch
 from torch import nn
 import torch.nn.functional as F
 import lightning as L
-
 from einops import rearrange, reduce, repeat
 from tqdm.auto import tqdm
 
 from edison.configs.config import Config
-from .positional_embedding import AbsolutePositionalEmbedding
-from .diffusion_layer import Encoder
+from edison.layers.positional_embedding import AbsolutePositionalEmbedding
+from edison.layers.diffusion_layer import Encoder
 
 
 class SinusoidalPosEmb(nn.Module):

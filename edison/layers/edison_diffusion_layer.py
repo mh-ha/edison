@@ -2,8 +2,8 @@ import torch
 from torch import nn, einsum
 from einops import rearrange, repeat
 
-from layers.residual import TimeConditionedResidual, GRUGating
-from layers.positional_embedding import SinusoidalPosEmb, ConsciousnessEmbedding, RelativePositionEmbedding
+from edison.layers.residual import TimeConditionedResidual, GRUGating
+from edison.layers.positional_embedding import SinusoidalPosEmb, ConsciousnessEmbedding, RelativePositionEmbedding
 
 
 class XTAttention(nn.Module):

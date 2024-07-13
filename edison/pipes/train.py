@@ -11,12 +11,12 @@ import os
 
 import torch
 
-from layers.lm import get_BART
-from layers.ae import PerceiverAutoEncoder, EdisonPerceiverAutoEncoder
-from modules.lightning_modules import LD4LGAE, LD4LGDiffusion, EdisonAE, EdisonDiffusion
-from modules.lightning_data_module import get_dataset, get_dataloader, get_xtdataloader
-from trainer import get_trainer
-from configs.config import Config
+from edison.layers.lm import get_BART
+from edison.layers.ae import PerceiverAutoEncoder, EdisonPerceiverAutoEncoder
+from edison.modules.lightning_modules import LD4LGAE, LD4LGDiffusion, EdisonAE, EdisonDiffusion
+from edison.modules.lightning_data_module import get_dataset, get_dataloader, get_xtdataloader
+from edison.pipes.trainer import get_trainer
+from edison.configs.config import Config
 
 os.environ['CURL_CA_BUNDLE'] = ''
 os.environ["TOKENIZERS_PARALLELISM"] = "false"

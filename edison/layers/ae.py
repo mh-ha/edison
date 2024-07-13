@@ -3,15 +3,15 @@ from typing import Literal
 
 import torch
 from torch import nn, einsum
+from torch.optim import AdamW
 import torch.nn.functional as F
 import lightning as L
 from einops import rearrange, repeat
 
-from ..configs.config import Config
-from . import AdamW
-from .positional_embedding import AbsolutePositionalEmbedding
-from .lm import get_BART
-from ..utils.utils import exists, divisible_by
+from edison.configs.config import Config
+from edison.layers.positional_embedding import AbsolutePositionalEmbedding
+from edison.layers.lm import get_BART
+from edison.utils.utils import exists, divisible_by
 
 
 class Autoencoder(L.LightningModule):

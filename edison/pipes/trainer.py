@@ -2,13 +2,13 @@ import lightning as L
 from lightning.pytorch.strategies import DDPStrategy
 from lightning.pytorch.profilers import PyTorchProfiler
 
-from .configs.config import Config
+from edison.configs.config import Config
 
 
 # TODO: 상세하게 구현
 def get_trainer(config: Config, debug=None):
     trainer = L.Trainer(
-        strategy=DDPStrategy(find_unused_parameters=True),
+        # strategy=DDPStrategy(find_unused_parameters=True),
         # max_epochs=1,
         # num_nodes=3,
         max_steps=250000,
