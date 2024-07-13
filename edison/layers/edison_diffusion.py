@@ -1,12 +1,12 @@
 import math
-import random 
+import random
 from functools import partial
 from collections import namedtuple
 
 import torch
 from torch import nn
 import torch.nn.functional as F
-from einops import rearrange, reduce, repeat
+from einops import rearrange, repeat
 from tqdm.auto import tqdm
 
 from edison.configs.config import EdisonConfig
@@ -31,11 +31,12 @@ class SinusoidalPosEmb(nn.Module):
         emb = torch.cat((emb.sin(), emb.cos()), dim=-1)
         return emb
 
-class  DiffusionTransformer(nn.Module):
+
+class DiffusionTransformer(nn.Module):
     def __init__(
-        self, tx_dim, tx_depth, heads, embedding_dim, context_dim, max_seq_len=64, cross_max_seq_len=32, self_condition=False, 
-        dropout=0.1, scale_shift=False, class_conditional=False, num_classes=0, 
-        class_unconditional_prob=0, seq2seq=False, seq2seq_context_dim=0, 
+        self, tx_dim, tx_depth, heads, embedding_dim, context_dim, max_seq_len=64, cross_max_seq_len=32, self_condition=False,
+        dropout=0.1, scale_shift=False, class_conditional=False, num_classes=0,
+        class_unconditional_prob=0, seq2seq=False, seq2seq_context_dim=0,
         dual_output=False, num_dense_connections=3, dense_output_connection=False,
         is_context_diffusion=False,
     ):
@@ -53,25 +54,29 @@ class  DiffusionTransformer(nn.Module):
 
         self.time_mlp = self._build_time_mlp(tx_dim)
         self.time_pos_embed_mlp = nn.Sequential(nn.GELU(), nn.Linear(tx_dim * 4, tx_dim))
-        # self.pos_emb = AbsolutePositionalEmbedding(tx_dim, max_seq_len)
         self.class_embedding = self._build_class_embedding(tx_dim, num_classes, class_conditional)
         self.null_embedding_seq2seq, self.seq2seq_proj = self._build_seq2seq(seq2seq, seq2seq_context_dim, tx_dim)
 
         if is_context_diffusion:
-            self.encoder = self._build_encoder(tx_dim, embedding_dim, tx_depth, heads, max_seq_len, cross_max_seq_len, is_context_diffusion, num_dense_connections)
+            self.encoder = self._build_encoder(
+                tx_dim, embedding_dim, tx_depth, heads, max_seq_len, cross_max_seq_len, is_context_diffusion, num_dense_connections
+            )
             self.input_proj = nn.Linear(context_dim * 2 if self_condition else context_dim, tx_dim)
             self.init_self_cond = nn.Parameter(torch.randn(1, context_dim)) if self_condition else None
             self.output_proj = nn.Linear(tx_dim * 2 if dense_output_connection else tx_dim, context_dim * 2 if dual_output else context_dim)
         else:
-            self.encoder = self._build_encoder(tx_dim, context_dim, tx_depth, heads, max_seq_len, cross_max_seq_len, is_context_diffusion, num_dense_connections)
+            self.encoder = self._build_encoder(
+                tx_dim, context_dim, tx_depth, heads, max_seq_len, cross_max_seq_len, is_context_diffusion, num_dense_connections
+            )
             self.input_proj = nn.Linear(embedding_dim * 2 if self_condition else embedding_dim, tx_dim)
             self.init_self_cond = nn.Parameter(torch.randn(1, embedding_dim)) if self_condition else None
-            self.output_proj = nn.Linear(tx_dim * 2 if dense_output_connection else tx_dim, embedding_dim * 2 if dual_output else embedding_dim)
+            self.output_proj = nn.Linear(
+                tx_dim * 2 if dense_output_connection else tx_dim, embedding_dim * 2 if dual_output else embedding_dim
+            )
         if self_condition:
             nn.init.normal_(self.init_self_cond, std=0.02)
         self.norm = nn.LayerNorm(tx_dim)
         init_zero_(self.output_proj)
-
 
     def _build_time_mlp(self, tx_dim):
         sinu_pos_emb = SinusoidalPosEmb(tx_dim)
@@ -83,7 +88,9 @@ class  DiffusionTransformer(nn.Module):
             nn.Linear(time_emb_dim, time_emb_dim)
         )
 
-    def _build_encoder(self, tx_dim, cross_dim, tx_depth, heads, max_seq_len, cross_max_seq_len, is_context_diffusion, num_dense_connections):
+    def _build_encoder(
+        self, tx_dim, cross_dim, tx_depth, heads, max_seq_len, cross_max_seq_len, is_context_diffusion, num_dense_connections
+    ):
         return Encoder(
             dim=tx_dim,
             cross_dim=cross_dim,
@@ -130,7 +137,13 @@ class  DiffusionTransformer(nn.Module):
         # pos_emb = self.pos_emb(z_t)
 
         if self.self_condition:
-            z_t = torch.cat((z_t, main_self_cond if main_self_cond is not None else repeat(self.init_self_cond, '1 d -> b l d', b=z_t.shape[0], l=z_t.shape[1])), dim=-1)
+            z_t = torch.cat(
+                (
+                    z_t, main_self_cond if main_self_cond is not None
+                    else repeat(self.init_self_cond, '1 d -> b l d', b=z_t.shape[0], l=z_t.shape[1])
+                ),
+                dim=-1
+            )
 
         x_input = self.input_proj(z_t)
         # tx_input = x_input + pos_emb + self.time_pos_embed_mlp(time_emb)
@@ -187,7 +200,7 @@ class EdisonGaussianDiffusion(nn.Module):
                 probs=self.embedding_diffusion_model.class_unconditional_prob
             )
 
-    def _initialize_diffusion_model(self, config: EdisonConfig) -> DiffusionTransformer:
+    def _initialize_diffusion_model(self, config: EdisonConfig) -> None:
         self.embedding_diffusion_model = DiffusionTransformer(
             tx_dim=config.tx_dim,
             tx_depth=config.tx_depth,
@@ -268,7 +281,6 @@ class EdisonGaussianDiffusion(nn.Module):
         sub_latents=None,
         sub_latents_mask=None,
         sampling=False,
-        cls_free_guidance=1.0,
         l2_normalize=False,
         diffusion_model=None,
     ):
@@ -309,10 +321,6 @@ class EdisonGaussianDiffusion(nn.Module):
         batch_size,
         lengths,
         class_id=None,
-        seq2seq_cond=None,
-        seq2seq_cond_mask=None,
-        cls_free_guidance=1.0,
-        l2_normalize=False,
         invert=False,
         context_z_t=None,
         embedding_z_t=None,
@@ -455,9 +463,6 @@ class EdisonGaussianDiffusion(nn.Module):
         loss = self.loss_fn(pred, target, reduction='mean')
         # print(f"loss: {loss.shape}, pred: {pred.shape}, target: {target.shape}")
         return loss.mean()
-        # loss = self.loss_fn(pred, target, reduction='none')
-        # loss = rearrange([reduce(loss[i][:torch.sum(context_latents_mask[i])], 'l d -> 1', 'mean') for i in range(txt_latent.shape[0])], 'b 1 -> b 1')
-        # return loss.mean()
 
     def embedding_forward(self, embedding_latents, context_latents, embedding_latents_mask, class_id, context_latents_mask, times):
         txt_latent = embedding_latents
@@ -502,7 +507,7 @@ class EdisonGaussianDiffusion(nn.Module):
         loss = self.loss_fn(pred, target, reduction='mean')
         return loss
 
-    def context_and_embedding_together_forward(
+    def forward_context_and_embedding_together(
         self,
         embedding_latents,
         context_latents,
@@ -563,7 +568,11 @@ class EdisonGaussianDiffusion(nn.Module):
     def forward(self, embedding_latents, context_latents, embedding_latents_mask, class_id, context_latents_mask):
         embedding_times = torch.zeros((embedding_latents.shape[0],)).uniform_(0, 1.).to(embedding_latents.device)
         context_times = torch.clamp(embedding_times * self.config.time_difference_embedding_over_context, 0, 1)
-        loss_context = self.context_forward(embedding_latents, context_latents, embedding_latents_mask, class_id, context_latents_mask, context_times)
-        loss_embedding = self.embedding_forward(embedding_latents, context_latents, embedding_latents_mask, class_id, context_latents_mask, embedding_times)
+        loss_context = self.context_forward(
+            embedding_latents, context_latents, embedding_latents_mask, class_id, context_latents_mask, context_times
+        )
+        loss_embedding = self.embedding_forward(
+            embedding_latents, context_latents, embedding_latents_mask, class_id, context_latents_mask, embedding_times
+        )
         loss = loss_context + loss_embedding
         return loss

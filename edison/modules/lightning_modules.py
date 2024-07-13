@@ -9,7 +9,8 @@ from transformers.models.bart.modeling_bart import (
 from tqdm import tqdm
 
 from edison.configs.config import Config
-from edison.layers.diffusion import GaussianDiffusion
+from edison.layers.edison_autoencoder import EdisonPerceiverAutoEncoder
+from edison.layers.ld4lg_diffusion import GaussianDiffusion
 from edison.layers.edison_diffusion import EdisonGaussianDiffusion
 
 
@@ -64,17 +65,14 @@ class LD4LGAE(L.LightningModule):
         inputs = batch['input_ids']
         attention_masks = batch['attention_mask']
         targets = batch['labels']
-        # print(f"start: {inputs.shape} {attention_masks.shape} {targets.shape}")
         # LM encoder outputs
         encoder_outputs = self.lm.get_encoder()(
             input_ids=inputs,
             attention_mask=attention_masks)
-        # print(f"LM encoder outputs: {encoder_outputs['last_hidden_state'].shape}")
         # AE encoder, decoder outputs
         encoder_outputs['last_hidden_state'] = self.ae(
             encoder_outputs['last_hidden_state'],
             attention_mask=attention_masks)
-        # print(f"AE outputs - {encoder_outputs['last_hidden_state'].shape}")
         # LM decoder outputs (loss)
         outputs = self.lm(
             labels=targets,
@@ -82,9 +80,6 @@ class LD4LGAE(L.LightningModule):
             # output_hidden_states=True,  # Debugging
         )
         loss = outputs.loss
-        # print(f"decoder outputs: {outputs.decoder_hidden_states[-1].shape}")
-        # print(f"decoder logits outputs: {outputs.logits.shape}")
-        # print(f"loss: {loss}")
         self.log('loss', loss, on_step=True, prog_bar=True)
         return loss
 
@@ -135,12 +130,12 @@ class LD4LGDiffusion(L.LightningModule):
 
     def configure_optimizers(self):
         optimizer = torch.optim.AdamW(self.diffusion_model.parameters(), lr=self.config.learning_rate)
-        scheduler = torch.optim.lr_scheduler.LinearLR(optimizer, start_factor=1, end_factor=0, total_iters=50000)
+        scheduler = torch.optim.lr_scheduler.LinearLR(optimizer, start_factor=1, end_factor=0, total_iters=250000)
         return {
             'optimizer': optimizer,
             'lr_scheduler': scheduler,
         }
-    
+
     @torch.no_grad()
     def generate(self, num_samples, seq_len, class_id=None, seed=42, batch_size=8):
         torch.manual_seed(seed)
@@ -151,7 +146,7 @@ class LD4LGDiffusion(L.LightningModule):
             encoder_output = BaseModelOutput(last_hidden_state=self.autoencoder.get_decoder_input(latents.clone()))
             sample_ids = self.autoencoder.lm.generate(encoder_outputs=encoder_output, attention_mask=attention_mask)
             texts_list = [self.tokenizer.decode(g, skip_special_tokens=True, clean_up_tokenization_spaces=True) for g in sample_ids]
-            texts_list = [text.strip() for text in texts_list if len(text.strip())>0]
+            texts_list = [text.strip() for text in texts_list if len(text.strip()) > 0]
             generated_texts.extend(texts_list)
         return generated_texts
 
@@ -161,7 +156,7 @@ class EdisonAE(L.LightningModule):
         self,
         config: Config,
         lm: BartForConditionalGeneration,
-        ae: torch.nn.Module,
+        ae: EdisonPerceiverAutoEncoder,
     ):
         super().__init__()
         self.save_hyperparameters('config')
@@ -227,7 +222,6 @@ class EdisonAE(L.LightningModule):
         loss_c1 = outputs_c1.loss
         loss_c0 = outputs_c0.loss
         loss = loss_c1 + loss_c0
-        # print(f"loss: {loss}")
         self.log('loss', loss, on_step=True, prog_bar=True)
         return loss
 
@@ -257,7 +251,6 @@ class EdisonDiffusion(L.LightningModule):
         self.diffusion_model = EdisonGaussianDiffusion(config=config, device=self.device)
 
     def forward(self, embedding_latents, context_latents, attention_mask, class_id=None):
-        # TODO: implement latents_c0 process
         if self.config.use_latents_c0:
             NotImplementedError('latents_c0 not implemented')
         context_latents = context_latents['latents_c1']
@@ -274,22 +267,17 @@ class EdisonDiffusion(L.LightningModule):
         return loss
 
     def training_step(self, batch, batch_idx):
-        # print(batch)
         inputs = batch['input_ids']
         attention_mask = batch['attention_mask']
         class_id = batch['label'] if 'label' in batch else None
-        # print(f"inputs: {inputs.shape} attention_mask: {attention_mask.shape} class_id: {class_id}")
         context_latents, embedding_latents = self.autoencoder.encode(inputs, attention_mask, return_embeddings=True)
-        # print(f"context_latents: {context_latents} \nembedding_latents: {embedding_latents}")
-        # print(f"context_latents_c1: {context_latents['latents_c1'].shape} embedding_latents_c1: {embedding_latents.shape}")
-        # print(f"context_latents_c0: {context_latents['latents_c0'].shape}")
         loss = self(embedding_latents, context_latents, attention_mask, class_id)
         self.log('loss', loss, on_step=True, prog_bar=True)
         return loss
 
     def configure_optimizers(self):
         optimizer = torch.optim.AdamW(self.diffusion_model.parameters(), lr=self.config.learning_rate)
-        scheduler = torch.optim.lr_scheduler.LinearLR(optimizer, start_factor=1, end_factor=0, total_iters=50000)
+        scheduler = torch.optim.lr_scheduler.LinearLR(optimizer, start_factor=1, end_factor=0, total_iters=250000)
         return {
             'optimizer': optimizer,
             'lr_scheduler': scheduler,
@@ -305,6 +293,6 @@ class EdisonDiffusion(L.LightningModule):
             sample_ids = einsum(latents, self.autoencoder.lm_input_embeddings.weight, 'b l d, n d -> b l n')
             sample_ids = sample_ids.argmax(dim=-1)
             texts_list = [self.tokenizer.decode(g, skip_special_tokens=True, clean_up_tokenization_spaces=True) for g in sample_ids]
-            texts_list = [text.strip() for text in texts_list if len(text.strip())>0]
+            texts_list = [text.strip() for text in texts_list if len(text.strip()) > 0]
             generated_texts.extend(texts_list)
         return generated_texts

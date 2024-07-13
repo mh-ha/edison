@@ -12,7 +12,8 @@ import os
 import torch
 
 from edison.layers.lm import get_BART
-from edison.layers.ae import PerceiverAutoEncoder, EdisonPerceiverAutoEncoder
+from edison.layers.edison_autoencoder import EdisonPerceiverAutoEncoder
+from edison.layers.ld4lg_autoencoder import PerceiverAutoEncoder
 from edison.modules.lightning_modules import LD4LGAE, LD4LGDiffusion, EdisonAE, EdisonDiffusion
 from edison.modules.lightning_data_module import get_dataset, get_dataloader, get_xtdataloader
 from edison.pipes.trainer import get_trainer
@@ -196,19 +197,6 @@ class TrainFunction:
             )
         else:
             model = EdisonAE(self.config, lm, ae)
-        # # 1-2. init LM and AE
-        # lm, tokenizer = get_BART()
-        # ae = EdisonPerceiverAutoEncoder(
-        #     dim_lm=self.config.dim_lm,
-        #     dim_ae=self.config.dim_ae,
-        #     num_layers=self.config.num_layers,
-        #     num_encoder_latents=self.config.num_encoder_latents,
-        #     num_decoder_latents=self.config.num_decoder_latents,
-        #     transformer_decoder=self.config.transformer_decoder,
-        #     l2_normalize_latents=self.config.l2_normalize_latents,
-        #     encoding_mode=self.config.encoding_mode
-        # )
-        # model = EdisonAE(self.config, lm, ae)
 
         # 3-4. init lightning module using LM, AE, Diffusion
         diffusion = EdisonDiffusion(self.config, model, tokenizer)

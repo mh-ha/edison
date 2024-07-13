@@ -13,7 +13,7 @@ from tqdm.auto import tqdm
 
 from edison.configs.config import Config
 from edison.layers.positional_embedding import AbsolutePositionalEmbedding
-from edison.layers.diffusion_layer import Encoder
+from edison.layers.ld4lg_diffusion_layer import Encoder
 
 
 class SinusoidalPosEmb(nn.Module):

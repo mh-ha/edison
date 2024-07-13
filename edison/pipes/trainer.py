@@ -1,5 +1,5 @@
 import lightning as L
-from lightning.pytorch.strategies import DDPStrategy
+# from lightning.pytorch.strategies import DDPStrategy
 from lightning.pytorch.profilers import PyTorchProfiler
 
 from edison.configs.config import Config
