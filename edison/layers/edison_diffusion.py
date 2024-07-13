@@ -134,8 +134,6 @@ class DiffusionTransformer(nn.Module):
             class_emb = rearrange(class_emb, 'b d -> b 1 d')
             time_emb = time_emb + class_emb
 
-        # pos_emb = self.pos_emb(z_t)
-
         if self.self_condition:
             z_t = torch.cat(
                 (
@@ -146,7 +144,6 @@ class DiffusionTransformer(nn.Module):
             )
 
         x_input = self.input_proj(z_t)
-        # tx_input = x_input + pos_emb + self.time_pos_embed_mlp(time_emb)
         tx_input = x_input + self.time_pos_embed_mlp(time_emb)
         main_latents = tx_input
 
@@ -164,18 +161,18 @@ class DiffusionTransformer(nn.Module):
 
         return main_latents
 
-    def _build_context(self, seq2seq_cond, seq2seq_cond_mask, batch_size, device):
-        context, context_mask = [], []
-        if seq2seq_cond is None:
-            null_context = repeat(self.null_embedding_seq2seq.weight, '1 d -> b 1 d', b=batch_size)
-            context.append(null_context)
-            context_mask.append(torch.tensor([[True] for _ in range(batch_size)], dtype=bool, device=device))
-        else:
-            context.append(self.seq2seq_proj(seq2seq_cond))
-            context_mask.append(seq2seq_cond_mask)
-        context = torch.cat(context, dim=1)
-        context_mask = torch.cat(context_mask, dim=1)
-        return context, context_mask
+    # def _build_context(self, seq2seq_cond, seq2seq_cond_mask, batch_size, device):
+    #     context, context_mask = [], []
+    #     if seq2seq_cond is None:
+    #         null_context = repeat(self.null_embedding_seq2seq.weight, '1 d -> b 1 d', b=batch_size)
+    #         context.append(null_context)
+    #         context_mask.append(torch.tensor([[True] for _ in range(batch_size)], dtype=bool, device=device))
+    #     else:
+    #         context.append(self.seq2seq_proj(seq2seq_cond))
+    #         context_mask.append(seq2seq_cond_mask)
+    #     context = torch.cat(context, dim=1)
+    #     context_mask = torch.cat(context_mask, dim=1)
+    #     return context, context_mask
 
 
 class EdisonGaussianDiffusion(nn.Module):

@@ -32,6 +32,7 @@ class XTAttention(nn.Module):
 
     # option 1
     def forward(self, words, position_words, conscious_words, cross_kv=None, position_cross=None, conscious_cross=None):
+        # print(f"[XTAttention.forward.entry] words: {words.shape}, cross_kv: {cross_kv.shape}")
         h = self.num_heads
         q_words = rearrange(self.words_to_q(words), 'b n (h d) -> b h n d', h=h)
         k_words = rearrange(self.words_to_k(cross_kv), 'b n (h d) -> b h n d', h=h)
@@ -40,6 +41,8 @@ class XTAttention(nn.Module):
         k_position = rearrange(self.position_to_k(position_cross), 'b n (h d) -> b h n d', h=h)
         q_conscious = rearrange(self.conscious_to_q(conscious_words), 'b n (h d) -> b h n d', h=h)
         k_conscious = rearrange(self.conscious_to_k(conscious_cross), 'b n (h d) -> b h n d', h=h)
+        # print(f"[XTAttention.forward.qkv] q_words: {q_words.shape}, k_words: {k_words.shape}, v_words: {v_words.shape}")
+        # print(f"[XTAttention.forward.qk] q_position: {q_position.shape}, k_position: {k_position.shape}, q_conscious: {q_conscious.shape}, k_conscious: {k_conscious.shape}")
 
         q_list = [q_words, q_position, q_conscious]
         k_list = [k_words, k_position, k_conscious]
@@ -48,10 +51,13 @@ class XTAttention(nn.Module):
             sim = einsum('b h i d, b h j d -> b h i j', q, k) * self.scale
             score = score + sim if score is not None else sim
         attn = score.softmax(dim=-1)
+        # print(f"[XTAttention.forward.attention] attn: {attn.shape}")
 
         out = einsum('b h i j, b h j d -> b h i d', attn, v_words)
         out = rearrange(out, 'b h n d -> b n (h d)')
-        return self.to_out(out)
+        out = self.to_out(out)
+        # print(f"[XTAttention.forward.exit] out: {out.shape}")
+        return out
 
     # # option 2
     # # TODO: c 정하기(attention mask 방식? 다른 방식?), mask 어떻게?
@@ -123,10 +129,8 @@ class Attention(nn.Module):
         q = rearrange(self.words_to_q(words), 'b n (h d) -> b h n d', h=h)
         k = rearrange(self.words_to_k(words_kv), 'b n (h d) -> b h n d', h=h)
         v = rearrange(self.words_to_v(words_kv), 'b n (h d) -> b h n d', h=h)
-
-        sim = einsum('b h i d, b h j d -> b h i j', q, k) * self.scale
-        attn = sim.softmax(dim=-1)
-
+        score = einsum('b h i d, b h j d -> b h i j', q, k) * self.scale
+        attn = score.softmax(dim=-1)
         out = einsum('b h i j, b h j d -> b h i d', attn, v)
         out = rearrange(out, 'b h n d -> b n (h d)')
         return self.to_out(out)
@@ -224,6 +228,7 @@ class Encoder(nn.Module):
         return position, conscious_words, conscious_cross
 
     def forward(self, words, cross_kv, attention_mask_words, attention_mask_cross, time_emb=None):
+        # print(f"[Encoder.forward.entry] words: {words.shape}, cross_kv: {cross_kv.shape}")
         # 여기서 position = RPE (고정 - 마지막 2개 레이어도 마찬가지로 사용)
         # conscious도 고정
         rpe_words = self.relative_position_layer(words.shape[0], words.shape[1], words.device)
@@ -232,6 +237,7 @@ class Encoder(nn.Module):
         # 마지막 2개 레이어: CPE 추가, hidden state에 더해서 사용
         hidden_states = []
         for i, layers in enumerate(self.layers):
+            # print(f"########### is_context_diffusion: {self.is_context_diffusion}: {i}th layer ###########")
             words = self._forward_layers(layers, words, cross_kv, rpe_words, rpe_cross, conscious_words, conscious_cross, time_emb)
             # Dense connection
             self._maybe_dense_connection(i, words, hidden_states)
@@ -242,6 +248,7 @@ class Encoder(nn.Module):
         words = self._forward_layers(
             self.last_layers, words, words, rpe_words, rpe_words, conscious_words, conscious_words, time_emb
         )
+        # print(f"[Encoder.forward.exit] words: {words.shape}, cross_kv: {cross_kv.shape}")
         return words
 
     def _forward_layers(self, layers, words, cross_kv, rpe_words, rpe_cross, conscious_words, conscious_cross, time_emb=None):
@@ -250,18 +257,22 @@ class Encoder(nn.Module):
             norm2, self_attn, self_attn_residual,
             norm3, ff, ff_residual
         ) = layers
+        # print(f"[Encoder._forward_layers.1] words: {words.shape}, cross_kv: {cross_kv.shape}")
         residual = words
-        # print('words 1:', words.shape)
         words = cross_attn(norm1(words), rpe_words, conscious_words, cross_kv, rpe_cross, conscious_cross)
-        # print('words 2:', words.shape)
+        # print(f"[Encoder._forward_layers.2] words: {words.shape}, cross_kv: {cross_kv.shape}")
         words = cross_attn_residual(words, residual)
-        # print('words 3:', words.shape)
+        # print(f"[Encoder._forward_layers.3] words: {words.shape}, cross_kv: {cross_kv.shape}")
         residual = words
         words = self_attn(norm2(words), rpe_words, conscious_words, norm2(words), rpe_words, conscious_words)
+        # print(f"[Encoder._forward_layers.4] words: {words.shape}, cross_kv: {cross_kv.shape}")
         words = self_attn_residual(words, residual)
+        # print(f"[Encoder._forward_layers.5] words: {words.shape}, cross_kv: {cross_kv.shape}")
         residual = words
         words = ff(norm3(words))
+        # print(f"[Encoder._forward_layers.6] words: {words.shape}, cross_kv: {cross_kv.shape}")
         words = ff_residual(words, residual, time_emb)
+        # print(f"[Encoder._forward_layers.7] words: {words.shape}, cross_kv: {cross_kv.shape}")
         return words
 
     def _maybe_dense_connection(self, idx, words, hidden_states: list):
