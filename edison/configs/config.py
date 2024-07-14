@@ -130,7 +130,7 @@ class LD4LGConfig(Config):
     l2_normalize_latents: bool = True
     #############################
     # LD4LG Diffusion
-    pretrained_ae_path: str = 'lightning_logs/ld4lg_ae'
+    pretrained_ae_path: str = 'lightning_logs/ld4lg_ae/checkpoints/epoch=137-step=50000.ckpt'
     sampling_timesteps: int = 250
     loss_type: str = 'l2'
     objective: str = 'pred_v'
@@ -189,7 +189,7 @@ class EdisonConfig(Config):
     encoding_mode: str = 'sentence_only'  # 'sentence_only', 'both_separately', 'both_together'
     #############################
     # Edison Diffusion
-    pretrained_ae_path: str = 'lightning_logs/edison_ae'
+    pretrained_ae_path: str = 'lightning_logs/edison_ae/epoch=1377-step=500000.ckpt'
     sampling_timesteps: int = 250
     loss_type: str = 'l2'
     objective: str = 'pred_v'
