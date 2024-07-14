@@ -133,8 +133,6 @@ class TrainFunction:
         5. mapping data to xt_data
         6. train
         """
-        # 1. init LM
-        # 3. init lightning module using LM and AE
         # training_step: inputs['input_ids', 'attention_mask'], target -> loss
         # forward: inputs['input_ids', 'attention_mask'] -> encoder_outputs
         model = EdisonAE(self.config)

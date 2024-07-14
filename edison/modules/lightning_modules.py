@@ -246,10 +246,8 @@ class EdisonDiffusion(L.LightningModule):
         ae_path: str,
     ):
         super().__init__()
-        self.save_hyperparameters('config')
+        self.save_hyperparameters('config', 'ae_path')
         self.config = config
-        # self.autoencoder = EdisonAE(self.config)
-        # self.autoencoder.load_state_dict(torch.load(ae_path))
         self.autoencoder = EdisonAE.load_from_checkpoint(
                 ae_path,
                 map_location='cuda' if torch.cuda.is_available() else 'cpu',
