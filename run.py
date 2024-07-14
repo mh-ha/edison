@@ -15,6 +15,7 @@ def main():
     parser.add_argument('--edison_ae', action='store_true', help='Train Edison AutoEncoder model', default=False)
     parser.add_argument('--edison_diffusion', action='store_true', help='Train Edison Diffusion model', default=False)
     parser.add_argument('--batch_size', type=int, default=256, help='Batch size for training', required=False)
+    parser.add_argument('--max_steps', type=int, default=50000, help='Max steps for training', required=False)
     parser.add_argument('--ae_checkpoint_path', type=str, default=None, help='Path to AE checkpoint', required=False)
     parser.add_argument('--debug', type=str, default=None, help='Debug mode', required=False)
     args = parser.parse_args()
@@ -26,13 +27,13 @@ def main():
         return
 
     if args.ld4lg_ae:
-        config = LD4LGConfig(train_for='AE', train_batch_size=args.batch_size)
+        config = LD4LGConfig(train_for='AE', train_batch_size=args.batch_size, max_steps=args.max_steps)
     elif args.ld4lg_diffusion:
-        config = LD4LGConfig(train_for='Diffusion', train_batch_size=args.batch_size)
+        config = LD4LGConfig(train_for='Diffusion', train_batch_size=args.batch_size, max_steps=args.max_steps)
     elif args.edison_ae:
-        config = EdisonConfig(train_for='AE', train_batch_size=args.batch_size)
+        config = EdisonConfig(train_for='AE', train_batch_size=args.batch_size, max_steps=args.max_steps)
     elif args.edison_diffusion:
-        config = EdisonConfig(train_for='Diffusion', train_batch_size=args.batch_size)
+        config = EdisonConfig(train_for='Diffusion', train_batch_size=args.batch_size, max_steps=args.max_steps)
     else:
         raise ValueError('Invalid model')
     print(config)

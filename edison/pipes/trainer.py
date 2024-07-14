@@ -11,7 +11,7 @@ def get_trainer(config: Config, debug=None):
         strategy=DDPStrategy(find_unused_parameters=True),
         # max_epochs=1,
         # num_nodes=3,
-        max_steps=250000,
+        max_steps=config.max_steps,
         # precision=16,
         gradient_clip_val=config.gradient_clip_val,
         gradient_clip_algorithm=config.gradient_clip_algorithm,

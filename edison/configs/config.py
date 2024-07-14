@@ -116,6 +116,7 @@ class LD4LGConfig(Config):
     gradient_clip_algorithm: str = 'norm'
     gradient_accumulation_steps: int = 1
     train_batch_size: int = 256
+    max_steps: int = 50000
     max_seq_len: int = 64
     learning_rate: float = 1e-4  # 1e-4 for AE, 2e-4 for diffusion
     #############################
@@ -161,6 +162,7 @@ class EdisonConfig(Config):
     gradient_clip_val: float = 1.0
     gradient_clip_algorithm: str = 'norm'
     gradient_accumulation_steps: int = 1
+    max_steps: int = 250000
     train_batch_size: int = 256
     max_seq_len: int = 64
     learning_rate: float = 1e-4  # 1e-4 for AE, 2e-4 for diffusion
