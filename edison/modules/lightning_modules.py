@@ -3,9 +3,6 @@ import torch
 from einops import einsum
 from transformers.modeling_outputs import BaseModelOutput
 from transformers import AutoTokenizer
-from transformers.models.bart.modeling_bart import (
-    BartForConditionalGeneration,
-)
 from tqdm import tqdm
 
 from edison.configs.config import Config
@@ -251,11 +248,13 @@ class EdisonDiffusion(L.LightningModule):
         super().__init__()
         self.save_hyperparameters('config')
         self.config = config
-        self.autoencoder = EdisonAE.load_from_checkpoint(
-                ae_path,
-                map_location='cuda' if torch.cuda.is_available() else 'cpu',
-                strict=False,
-            )
+        self.autoencoder = EdisonAE(self.config)
+        self.autoencoder.load_state_dict(torch.load(ae_path))
+        # self.autoencoder = EdisonAE.load_from_checkpoint(
+        #         ae_path,
+        #         map_location='cuda' if torch.cuda.is_available() else 'cpu',
+        #         strict=False,
+        #     )
         self.autoencoder.freeze()
         self.tokenizer = self.autoencoder.tokenizer
         self.diffusion_model = EdisonGaussianDiffusion(config=config, device=self.device)

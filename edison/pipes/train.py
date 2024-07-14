@@ -134,30 +134,17 @@ class TrainFunction:
         6. train
         """
         # 1. init LM
-        lm, tokenizer = get_BART()
-
-        # 2. init AE
-        ae = EdisonPerceiverAutoEncoder(
-            dim_lm=self.config.dim_lm,
-            dim_ae=self.config.dim_ae,
-            num_layers=self.config.num_layers,
-            num_encoder_latents=self.config.num_encoder_latents,
-            num_decoder_latents=self.config.num_decoder_latents,
-            transformer_decoder=self.config.transformer_decoder,
-            l2_normalize_latents=self.config.l2_normalize_latents,
-            encoding_mode=self.config.encoding_mode
-        )
         # 3. init lightning module using LM and AE
         # training_step: inputs['input_ids', 'attention_mask'], target -> loss
         # forward: inputs['input_ids', 'attention_mask'] -> encoder_outputs
-        model = EdisonAE(self.config, lm, ae)
+        model = EdisonAE(self.config)
 
         # 4. init data loader
         self.dataloader = get_xtdataloader(
             self.config,
             self.dataset['train'],
-            lm._get_decoder_start_token_id(),
-            tokenizer,
+            model.lm._get_decoder_start_token_id(),
+            model.tokenizer,
             self.config.max_seq_len,
             self.config.min_buffer_size,
             mode='ae',)
