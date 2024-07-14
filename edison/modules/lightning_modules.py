@@ -255,7 +255,6 @@ class EdisonDiffusion(L.LightningModule):
                 ae_path,
                 map_location='cuda' if torch.cuda.is_available() else 'cpu',
                 strict=False,
-                config=self.config
             )
         self.autoencoder.freeze()
         self.tokenizer = self.autoencoder.tokenizer
