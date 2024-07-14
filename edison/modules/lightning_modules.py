@@ -9,6 +9,7 @@ from transformers.models.bart.modeling_bart import (
 from tqdm import tqdm
 
 from edison.configs.config import Config
+from edison.layers.lm import get_BART
 from edison.layers.edison_autoencoder import EdisonPerceiverAutoEncoder
 from edison.layers.ld4lg_diffusion import GaussianDiffusion
 from edison.layers.edison_diffusion import EdisonGaussianDiffusion
@@ -155,18 +156,25 @@ class EdisonAE(L.LightningModule):
     def __init__(
         self,
         config: Config,
-        lm: BartForConditionalGeneration,
-        ae: EdisonPerceiverAutoEncoder,
     ):
         super().__init__()
         self.save_hyperparameters('config')
         self.config = config
-        self.lm = lm
+        self.lm, self.tokenizer = get_BART()
         # Freeze LM
-        for param in lm.parameters():
+        for param in self.lm.parameters():
             param.requires_grad = False
-        self.lm_input_embeddings = lm.get_input_embeddings()
-        self.ae = ae
+        self.lm_input_embeddings = self.lm.get_input_embeddings()
+        self.ae = EdisonPerceiverAutoEncoder(
+            dim_lm=self.config.dim_lm,
+            dim_ae=self.config.dim_ae,
+            num_layers=self.config.num_layers,
+            num_encoder_latents=self.config.num_encoder_latents,
+            num_decoder_latents=self.config.num_decoder_latents,
+            transformer_decoder=self.config.transformer_decoder,
+            l2_normalize_latents=self.config.l2_normalize_latents,
+            encoding_mode=self.config.encoding_mode
+        )
 
     def forward(self, batch):
         """
@@ -238,16 +246,19 @@ class EdisonDiffusion(L.LightningModule):
     def __init__(
         self,
         config: Config,
-        autoencoder: EdisonAE,
-        tokenizer: AutoTokenizer,
+        ae_path: str,
     ):
         super().__init__()
         self.save_hyperparameters('config')
         self.config = config
-        self.tokenizer = tokenizer
-        self.autoencoder = autoencoder
+        self.autoencoder = EdisonAE.load_from_checkpoint(
+                ae_path,
+                map_location='cuda' if torch.cuda.is_available() else 'cpu',
+                strict=False,
+                config=self.config
+            )
         self.autoencoder.freeze()
-
+        self.tokenizer = self.autoencoder.tokenizer
         self.diffusion_model = EdisonGaussianDiffusion(config=config, device=self.device)
 
     def forward(self, embedding_latents, context_latents, attention_mask, class_id=None):

@@ -176,42 +176,21 @@ class TrainFunction:
         """
         # 1-2. load pretrained LM and AE
         checkpoint_path = kwargs.get('ae_checkpoint_path', None)
-        lm, tokenizer = get_BART()
-        ae = EdisonPerceiverAutoEncoder(
-            dim_lm=self.config.dim_lm,
-            dim_ae=self.config.dim_ae,
-            num_layers=self.config.num_layers,
-            num_encoder_latents=self.config.num_encoder_latents,
-            num_decoder_latents=self.config.num_decoder_latents,
-            transformer_decoder=self.config.transformer_decoder,
-            l2_normalize_latents=self.config.l2_normalize_latents,
-            encoding_mode=self.config.encoding_mode
-        )
-        if checkpoint_path or self.config.pretrained_ae_path:
-            path = checkpoint_path if checkpoint_path else self.config.pretrained_ae_path
-            model = EdisonAE.load_from_checkpoint(
-                path,
-                map_location='cuda' if torch.cuda.is_available() else 'cpu',
-                strict=False,
-                lm=lm,
-                ae=ae,
-                config=self.config
-            )
-        else:
-            model = EdisonAE(self.config, lm, ae)
+        ae_path = checkpoint_path if checkpoint_path else self.config.pretrained_ae_path
 
         # 3-4. init lightning module using LM, AE, Diffusion
-        diffusion = EdisonDiffusion(self.config, model, tokenizer)
+        diffusion = EdisonDiffusion(self.config, ae_path)
 
         # 5. init data loader
         self.dataloader = get_xtdataloader(
             self.config,
             self.dataset['train'],
-            lm._get_decoder_start_token_id(),
-            tokenizer,
+            diffusion.autoencoder.lm._get_decoder_start_token_id(),
+            diffusion.tokenizer,
             self.config.max_seq_len,
             self.config.min_buffer_size,
-            mode='diffusion',)
+            mode='diffusion',
+        )
 
         # 6. train
         self.trainer.fit(diffusion, train_dataloaders=self.dataloader)
