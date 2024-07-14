@@ -130,7 +130,7 @@ class LD4LGConfig(Config):
     l2_normalize_latents: bool = True
     #############################
     # LD4LG Diffusion
-    pretrained_ae_path: str = ''
+    pretrained_ae_path: str = 'lightning_logs/ld4lg_ae'
     sampling_timesteps: int = 250
     loss_type: str = 'l2'
     objective: str = 'pred_v'
