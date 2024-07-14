@@ -95,9 +95,10 @@ class TrainFunction:
             transformer_decoder=self.config.transformer_decoder,
             l2_normalize_latents=self.config.l2_normalize_latents)
         # print(f"debug - ae_params : {list(ae.parameters())[0]}")
-        if checkpoint_path:
+        if checkpoint_path or self.config.pretrained_ae_path:
+            path = checkpoint_path if checkpoint_path else self.config.pretrained_ae_path
             model = LD4LGAE.load_from_checkpoint(
-                checkpoint_path,
+                path,
                 map_location='cuda' if torch.cuda.is_available() else 'cpu',
                 strict=False,
                 config=self.config,
@@ -186,9 +187,10 @@ class TrainFunction:
             l2_normalize_latents=self.config.l2_normalize_latents,
             encoding_mode=self.config.encoding_mode
         )
-        if checkpoint_path:
+        if checkpoint_path or self.config.pretrained_ae_path:
+            path = checkpoint_path if checkpoint_path else self.config.pretrained_ae_path
             model = EdisonAE.load_from_checkpoint(
-                checkpoint_path,
+                path,
                 map_location='cuda' if torch.cuda.is_available() else 'cpu',
                 strict=False,
                 lm=lm,
