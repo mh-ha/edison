@@ -176,7 +176,7 @@ class EdisonConfig(Config):
         max_length=max_seq_len)
     """
     min_buffer_size: int = 5
-    buffer_sampling_ratio: float = 0.7   # ratio -> vocab, (1-ratio) -> batch
+    buffer_sampling_ratio: float = 0.5   # ratio -> vocab, (1-ratio) -> batch
     ############################
     # Edison AE
     dim_lm: int = 768
@@ -189,7 +189,7 @@ class EdisonConfig(Config):
     encoding_mode: str = 'sentence_only'  # 'sentence_only', 'both_separately', 'both_together'
     #############################
     # Edison Diffusion
-    pretrained_ae_path: str = 'lightning_logs/edison_ae/checkpoints/epoch=1377-step=500000.ckpt'
+    pretrained_ae_path: str = 'lightning_logs/edison_ae_100k/checkpoints/epoch=275-step=100000.ckpt'
     sampling_timesteps: int = 250
     loss_type: str = 'l2'
     objective: str = 'pred_v'
