@@ -102,7 +102,8 @@ class LD4LGDiffusion(L.LightningModule):
         self.save_hyperparameters('config')
         self.config = config
         # self.autoencoder = autoencoder
-        self.autoencoder = PerceiverAutoEncoder(
+        lm, tokenizer = get_BART()
+        ae = PerceiverAutoEncoder(
             dim_lm=self.config.dim_lm,
             dim_ae=self.config.dim_ae,
             num_layers=self.config.num_layers,
@@ -110,8 +111,15 @@ class LD4LGDiffusion(L.LightningModule):
             num_decoder_latents=self.config.num_decoder_latents,
             transformer_decoder=self.config.transformer_decoder,
             l2_normalize_latents=self.config.l2_normalize_latents)
+        self.autoencoder = LD4LGAE.load_from_checkpoint(
+                config.pretrained_ae_path,
+                map_location='cuda' if torch.cuda.is_available() else 'cpu',
+                strict=False,
+                config=self.config,
+                lm=lm,
+                ae=ae,
+            )
         self.autoencoder.freeze()
-        self.tokenizer = AutoTokenizer.from_pretrained('facebook/bart-base')
         # self.tokenizer = tokenizer
         self.diffusion_model = GaussianDiffusion(config=config, device=self.device)
 
