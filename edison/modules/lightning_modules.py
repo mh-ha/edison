@@ -8,8 +8,9 @@ from tqdm import tqdm
 from edison.configs.config import Config
 from edison.layers.lm import get_BART
 from edison.layers.edison_autoencoder import EdisonPerceiverAutoEncoder
-from edison.layers.ld4lg_diffusion import GaussianDiffusion
 from edison.layers.edison_diffusion import EdisonGaussianDiffusion
+from edison.layers.ld4lg_autoencoder import PerceiverAutoEncoder
+from edison.layers.ld4lg_diffusion import GaussianDiffusion
 
 
 class LD4LGAE(L.LightningModule):
@@ -94,15 +95,24 @@ class LD4LGDiffusion(L.LightningModule):
     def __init__(
         self,
         config: Config,
-        autoencoder: LD4LGAE,
-        tokenizer: AutoTokenizer,
+        # autoencoder: LD4LGAE,
+        # tokenizer: AutoTokenizer,
     ):
         super().__init__()
         self.save_hyperparameters('config')
         self.config = config
-        self.autoencoder = autoencoder
+        # self.autoencoder = autoencoder
+        self.autoencoder = PerceiverAutoEncoder(
+            dim_lm=self.config.dim_lm,
+            dim_ae=self.config.dim_ae,
+            num_layers=self.config.num_layers,
+            num_encoder_latents=self.config.num_encoder_latents,
+            num_decoder_latents=self.config.num_decoder_latents,
+            transformer_decoder=self.config.transformer_decoder,
+            l2_normalize_latents=self.config.l2_normalize_latents)
         self.autoencoder.freeze()
-        self.tokenizer = tokenizer
+        self.tokenizer = AutoTokenizer.from_pretrained('facebook/bart-base')
+        # self.tokenizer = tokenizer
         self.diffusion_model = GaussianDiffusion(config=config, device=self.device)
 
     def forward(self, encoder_outputs, class_id=None):
