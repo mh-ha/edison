@@ -29,7 +29,7 @@ if __name__ == '__main__':
     if args.edison:
         model = EdisonDiffusion.load_from_checkpoint(args.model_path)
     else:
-        config = LD4LGConfig(train_for='Diffusion', train_batch_size=args.batch_size, max_steps=args.max_steps)
+        config = LD4LGConfig(train_for='Diffusion')
         lm, tokenizer = get_BART()
         ae = PerceiverAutoEncoder(
             dim_lm=config.dim_lm,
