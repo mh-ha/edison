@@ -1,7 +1,16 @@
 import argparse
 
+import torch
+
+from edison.configs.config import LD4LGConfig
 from edison.pipes.generate import generate_from_model
-from edison.modules.lightning_modules import LD4LGDiffusion, EdisonDiffusion
+from edison.modules.lightning_modules import (
+    LD4LGAE,
+    LD4LGDiffusion,
+    EdisonDiffusion
+)
+from edison.layers.lm import get_BART
+from edison.layers.ld4lg_autoencoder import PerceiverAutoEncoder
 
 
 parser = argparse.ArgumentParser()
@@ -20,7 +29,26 @@ if __name__ == '__main__':
     if args.edison:
         model = EdisonDiffusion.load_from_checkpoint(args.model_path)
     else:
-        model = LD4LGDiffusion.load_from_checkpoint(args.model_path)
+        config = LD4LGConfig(train_for='Diffusion', train_batch_size=args.batch_size, max_steps=args.max_steps)
+        lm, tokenizer = get_BART()
+        ae = PerceiverAutoEncoder(
+            dim_lm=config.dim_lm,
+            dim_ae=config.dim_ae,
+            num_layers=config.num_layers,
+            num_encoder_latents=config.num_encoder_latents,
+            num_decoder_latents=config.num_decoder_latents,
+            transformer_decoder=config.transformer_decoder,
+            l2_normalize_latents=config.l2_normalize_latents)
+        autoencoder = LD4LGAE.load_from_checkpoint(
+                config.pretrained_ae_path,
+                map_location='cuda' if torch.cuda.is_available() else 'cpu',
+                strict=False,
+                config=config,
+                lm=lm,
+                ae=ae,
+            )
+        model = LD4LGDiffusion.load_from_checkpoint(args.model_path, autoencoder=autoencoder, tokenizer=tokenizer)
+
     generate_from_model(
         model=model,
         num_samples=args.num_samples,
