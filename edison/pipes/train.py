@@ -12,7 +12,6 @@ import os
 import torch
 
 from edison.layers.lm import get_BART
-from edison.layers.edison_autoencoder import EdisonPerceiverAutoEncoder
 from edison.layers.ld4lg_autoencoder import PerceiverAutoEncoder
 from edison.modules.lightning_modules import LD4LGAE, LD4LGDiffusion, EdisonAE, EdisonDiffusion
 from edison.modules.lightning_data_module import get_dataset, get_dataloader, get_xtdataloader

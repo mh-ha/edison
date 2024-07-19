@@ -8,14 +8,14 @@ from edison.utils.utils import exists, init_zero_
 class ScaleShift(nn.Module):
     def __init__(self, time_emb_dim, dim_out):
         super().__init__()
-        self.time_mlp = nn.Sequential(            
+        self.time_mlp = nn.Sequential(
             nn.GELU(),
             nn.Linear(time_emb_dim, dim_out * 2)
         )
         init_zero_(self.time_mlp[-1])
 
     def forward(self, x, time_emb):
-        scale, shift = self.time_mlp(time_emb).chunk(2, dim = 2)
+        scale, shift = self.time_mlp(time_emb).chunk(2, dim=2)
         x = x * (scale + 1) + shift
         return x
 
@@ -30,7 +30,7 @@ class TimeConditionedResidual(nn.Module):
 
 
 class Residual(nn.Module):
-    def __init__(self, dim, scale_residual = False, scale_residual_constant = 1.):
+    def __init__(self, dim, scale_residual=False, scale_residual_constant=1.):
         super().__init__()
         self.residual_scale = nn.Parameter(torch.ones(dim)) if scale_residual else None
         self.scale_residual_constant = scale_residual_constant
@@ -43,8 +43,9 @@ class Residual(nn.Module):
 
         return x + residual
 
+
 class GRUGating(nn.Module):
-    def __init__(self, dim, scale_residual = False):
+    def __init__(self, dim, scale_residual=False):
         super().__init__()
         self.gru = nn.GRUCell(dim, dim)
         self.residual_scale = nn.Parameter(torch.ones(dim)) if scale_residual else None
