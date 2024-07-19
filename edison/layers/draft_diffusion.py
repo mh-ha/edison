@@ -12,6 +12,7 @@ from edison.layers.base import BaseDiffusion
 from edison.layers.draft_encoder import BaseEncoder
 from edison.layers.positional_embedding import SinusoidalPosEmb
 from edison.schemas.model import DiffusionOutput
+import edison.utils.utils as utils
 
 
 class Diffusion(BaseDiffusion):
@@ -23,11 +24,14 @@ class Diffusion(BaseDiffusion):
         super().__init__(
             encoder=encoder
         )
+        # init
         self.config = config
         self.self_condition = config.self_condition
         self.input_dim = config.lm_dim
         self.internal_dim = encoder.internal_dim
         self.output_dim = config.lm_dim
+
+        # layers
         self.time_proj = self._build_time_mlp(self.internal_dim)
         self.input_proj = self._build_projection(config.lm_dim, self.internal_dim)
         self.context_input_proj = self._build_projection(config.latent_dim, self.internal_dim)
@@ -61,7 +65,49 @@ class Diffusion(BaseDiffusion):
         self,
         latent: Tensor,
         context: Tensor,
-        time: int,
+        times: Tensor,
+        attention_mask: Optional[Tensor] = None,
+        self_cond: Optional[Tensor] = None,
+    ) -> DiffusionOutput:
+        alpha = utils.time_to_alpha(times, latent.ndim)
+        encoded = self.encode(
+            latent=latent,
+            context=context,
+            alpha=alpha,
+            attention_mask=attention_mask,
+            self_cond=self_cond,
+        )
+        pred_start = self._predict_start_from_v(latent, alpha, encoded)
+        pred_noise = self._predict_noise_from_v(latent, alpha, encoded)
+        pred_v = encoded
+        # TODO: check sampling process: how pred calculation is different from training
+        if self.config.l2_normalize_latents and sampling:
+            pred_start = F.normalize(pred_start, dim=-1) * math.sqrt(pred_start.shape[-1])
+            pred_noise = self._predict_noise_from_start(latent, alpha, pred_start)
+            pred_v = self._predict_v_from_start_and_eps(latent, alpha, pred_start, pred_noise)
+        return DiffusionOutput(
+            pred_start=pred_start,
+            pred_noise=pred_noise,
+            pred_v=pred_v,
+        )
+
+    def _predict_start_from_v(self, latent, alpha, v):
+        return alpha.sqrt() * latent - (1 - alpha).sqrt() * v
+
+    def _predict_noise_from_v(self, latent, alpha, v):
+        return (1 - alpha).sqrt() * latent + alpha.sqrt() * v
+
+    def _predict_noise_from_start(self, latent, alpha, x0):
+        return (latent - alpha.sqrt() * x0) / (1 - alpha).sqrt().clamp(min=1e-8)
+
+    def _predict_v_from_start_and_eps(self, latent, alpha, x, noise):
+        return alpha.sqrt() * noise - x * (1 - alpha).sqrt()
+
+    def encode(
+        self,
+        latent: Tensor,
+        context: Tensor,
+        alpha: Tensor,
         attention_mask: Optional[Tensor] = None,
         self_cond: Optional[Tensor] = None,
     ) -> Tensor:
@@ -79,7 +125,7 @@ class Diffusion(BaseDiffusion):
         context = self.context_input_proj(context)
 
         # add time embedding
-        time_emb = self.time_proj(time * 1000)
+        time_emb = self.time_proj(alpha * 1000)
         time_emb = rearrange(time_emb, 'b d -> b 1 d')
         latent = latent + time_emb
 
@@ -93,25 +139,7 @@ class Diffusion(BaseDiffusion):
         # normalization and output projection
         encoded = self.norm(encoded)
         encoded = self.output_proj(encoded)
-        return DiffusionOutput(
-            encoded=encoded,
-        )
-
-    def encode(
-        self,
-        latent: Tensor,
-        context: Tensor,
-        time: int,
-        attention_mask: Optional[Tensor] = None,
-        self_cond: Optional[Tensor] = None,
-    ) -> DiffusionOutput:
-        return self.forward(
-            latent=latent,
-            context=context,
-            time=time,
-            attention_mask=attention_mask,
-            self_cond=self_cond
-        )
+        return encoded
 
     @property
     def loss_fn(self):
@@ -132,8 +160,7 @@ class Diffusion(BaseDiffusion):
     ) -> Tensor:
         # generate noise, alpha, target
         noise = torch.randn_like(embedding_latents).to(embedding_latents.device)
-        alpha = self._time_to_alpha(times, embedding_latents.ndim)
-        # alpha = right_pad_dims_to(embedding_latents, alpha)
+        alpha = utils.time_to_alpha(times, embedding_latents.ndim)
         target = alpha.sqrt() * noise - (1 - alpha).sqrt() * embedding_latents
         embedding_latents = alpha.sqrt() * embedding_latents + (1 - alpha).sqrt() * noise
 
@@ -169,35 +196,6 @@ class Diffusion(BaseDiffusion):
         pred = predictions.pred_v
         loss = self.loss_fn(pred, target, reduction='mean')
         return loss
-
-    def _cosine_schedule(
-        self,
-        t: Tensor,
-        start: int = 0,
-        end: int = 1,
-        tau: int = 1,
-        clip_min: float = 1e-9,
-    ):
-        power = 2 * tau
-        v_start = math.cos(start * math.pi / 2) ** power
-        v_end = math.cos(end * math.pi / 2) ** power
-        output = torch.cos((t * (end - start) + start) * math.pi / 2) ** power
-        output = (v_end - output) / (v_end - v_start)
-        return output.clamp(min=clip_min)
-
-    def _time_to_alpha(
-        self,
-        t: Tensor,
-        latent_ndim: int,
-        scale: float = 1.,
-    ):
-        alpha = self._cosine_schedule(t)
-        shifted_log_snr = torch.log((alpha / (1 - alpha))).clamp(min=-15, max=15)
-        shifted_log_snr = shifted_log_snr + (2 * math.log(scale))
-        shifted_log_snr = torch.sigmoid(shifted_log_snr)
-        if shifted_log_snr.ndim < latent_ndim:
-            shifted_log_snr = shifted_log_snr.unsqueeze(-1)
-        return shifted_log_snr
 
     def sample(self, x) -> Tensor:
         return torch.tensor(0.)

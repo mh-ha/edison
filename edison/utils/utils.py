@@ -3,7 +3,7 @@ import random
 from functools import partial, wraps
 
 import torch
-from torch import nn
+from torch import nn, Tensor
 import torch.nn.functional as F
 import numpy as np
 from einops import rearrange, reduce
@@ -102,7 +102,14 @@ def normalize_z_t_variance(z_t, mask, eps=1e-5):
     std = rearrange([reduce(z_t[i][:torch.sum(mask[i])], 'l d -> 1 1', partial(torch.std, unbiased=False)) for i in range(z_t.shape[0])], 'b 1 1 -> b 1 1')
     return z_t / std.clamp(min=eps)
 
-def cosine_schedule(t, start=0, end=1, tau=1, clip_min=1e-9):
+
+def cosine_schedule(
+    t: Tensor,
+    start: int = 0,
+    end: int = 1,
+    tau: int = 1,
+    clip_min: float = 1e-9,
+):
     power = 2 * tau
     v_start = math.cos(start * math.pi / 2) ** power
     v_end = math.cos(end * math.pi / 2) ** power
@@ -110,19 +117,22 @@ def cosine_schedule(t, start=0, end=1, tau=1, clip_min=1e-9):
     output = (v_end - output) / (v_end - v_start)
     return output.clamp(min=clip_min)
 
-def log_snr_to_alpha(log_snr):
-    return torch.sigmoid(log_snr)
 
-def alpha_to_shifted_log_snr(alpha, scale=1):
-    return log((alpha / (1 - alpha))).clamp(min=-15, max=15) + 2 * np.log(scale).item()
+def time_to_alpha(
+    t: Tensor,
+    latent_ndim: int,
+    scale: float = 1.,
+):
+    alpha = cosine_schedule(t)
+    shifted_log_snr = torch.log((alpha / (1 - alpha))).clamp(min=-15, max=15)
+    shifted_log_snr = shifted_log_snr + (2 * math.log(scale))
+    shifted_log_snr = torch.sigmoid(shifted_log_snr)
+    if shifted_log_snr.ndim < latent_ndim:
+        shifted_log_snr = shifted_log_snr.unsqueeze(-1)
+    return shifted_log_snr
 
-def time_to_alpha(t, alpha_schedule, scale):
-    alpha = alpha_schedule(t)
-    shifted_log_snr = alpha_to_shifted_log_snr(alpha, scale=scale)
-    return log_snr_to_alpha(shifted_log_snr)
 
 def set_seeds(seed):
     random.seed(seed)
     torch.manual_seed(seed)
     torch.cuda.manual_seed(seed)
-    
