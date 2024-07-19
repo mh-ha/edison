@@ -126,7 +126,6 @@ class DiffusionTransformer(nn.Module):
         """
 
         time_emb = self.time_mlp(time*1000)
-
         time_emb = rearrange(time_emb, 'b d -> b 1 d')
 
         if self.class_conditional:

@@ -241,25 +241,6 @@ class EdisonGaussianDiffusion(nn.Module):
             num_dense_connections=config.num_dense_connections,
             is_context_diffusion=False,
         )
-        # self.context_diffusion_model = DiffusionTransformer(
-        #     tx_dim=config.tx_dim,
-        #     tx_depth=config.tx_depth,
-        #     heads=config.tx_dim // config.attn_head_dim,
-        #     embedding_dim=config.tx_dim,
-        #     context_dim=config.latent_dim,
-        #     max_seq_len=config.num_encoder_latents,
-        #     cross_max_seq_len=config.max_seq_len,
-        #     self_condition=config.self_condition,
-        #     scale_shift=config.scale_shift,
-        #     dropout=config.dropout,
-        #     class_conditional=config.class_conditional,
-        #     num_classes=config.num_classes,
-        #     class_unconditional_prob=config.class_unconditional_prob,
-        #     seq2seq=(config.dataset_name in {'xsum', 'qqp', 'qg', 'wmt14-de-en', 'wmt14-en-de'}),
-        #     seq2seq_context_dim=config.lm_dim,
-        #     num_dense_connections=config.num_dense_connections,
-        #     is_context_diffusion=True,
-        # )
 
     def _initialize_buffers(self, config: EdisonConfig):
         self.register_buffer('latent_mean', torch.zeros(config.latent_dim, dtype=torch.float32))
@@ -364,21 +345,6 @@ class EdisonGaussianDiffusion(nn.Module):
         # print(f"embedding_z_t: {embedding_z_t.shape}, embedding_mask: {embedding_mask.shape}, embedding_shape: {embedding_shape}")
 
         for time, time_next in tqdm(time_pairs, desc='sampling loop time step', total=self.sampling_timesteps):
-            # # context_diffusion_model
-            # context_output = self.diffusion_model_predictions(
-            #     context_z_t,
-            #     context_mask,
-            #     time,
-            #     main_self_cond=context_x_start,
-            #     class_id=class_id,
-            #     sub_latents=embedding_z_t,
-            #     sub_latents_mask=embedding_mask,
-            #     diffusion_model=self.context_diffusion_model,
-            # )
-            # context_x_start = context_output.pred_x_start
-            # context_eps = context_output.pred_noise
-
-            # embedding_diffusion_model
             embedding_output = self.diffusion_model_predictions(
                 embedding_z_t,
                 embedding_mask,
@@ -398,9 +364,6 @@ class EdisonGaussianDiffusion(nn.Module):
             if time_next[0] <= 0:
                 embedding_z_t = embedding_x_start
                 continue
-            # context_noise = torch.randn_like(context_z_t)
-            # context_z_t = 1 / alpha_now.sqrt() * (context_z_t - (1 - alpha_now) / (1 - alpha).sqrt() * context_eps)
-            # context_z_t = context_z_t + (torch.sqrt(1 - alpha_now) * context_noise)
             embedding_noise = torch.randn_like(embedding_z_t)
             embedding_z_t = 1 / alpha_now.sqrt() * (embedding_z_t - (1 - alpha_now) / (1 - alpha).sqrt() * embedding_eps)
             embedding_z_t = embedding_z_t + (torch.sqrt(1 - alpha_now) * embedding_noise)
@@ -436,50 +399,6 @@ class EdisonGaussianDiffusion(nn.Module):
             return loss_types[self.loss_type]
         else:
             raise ValueError(f'Invalid loss type {self.loss_type}')
-
-    # def context_forward(self, embedding_latents, context_latents, embedding_latents_mask, class_id, context_latents_mask, times):
-    #     txt_latent = context_latents
-    #     noise = torch.randn_like(txt_latent).to(txt_latent.device)
-    #     alpha = self.train_schedule(times)
-    #     alpha = right_pad_dims_to(txt_latent, alpha)
-    #     # print(alpha.shape, txt_latent.shape, noise.shape)
-    #     z_t = alpha.sqrt() * txt_latent + (1 - alpha).sqrt() * noise
-    #     context_latents = z_t
-
-    #     if self.context_diffusion_model.class_conditional and self.context_diffusion_model.class_unconditional_prob > 0:
-    #         assert class_id is not None
-    #         class_unconditional_mask = self.class_unconditional_bernoulli.sample(class_id.shape).bool()
-    #         class_id[class_unconditional_mask] = self.context_diffusion_model.num_classes
-    #     context_self_cond = None
-    #     if self.self_condition and (random.random() < self.train_prob_self_cond):
-    #         with torch.no_grad():
-    #             model_output = self.diffusion_model_predictions(
-    #                 context_latents,
-    #                 context_latents_mask,
-    #                 times,
-    #                 class_id=class_id,
-    #                 sub_latents=embedding_latents,
-    #                 sub_latents_mask=embedding_latents_mask,
-    #                 diffusion_model=self.context_diffusion_model,
-    #             )
-    #             context_self_cond = model_output.pred_x_start.detach()
-    #             if self.l2_normalize:
-    #                 context_self_cond = F.normalize(context_self_cond, dim=-1) * math.sqrt(context_self_cond.shape[-1])
-    #     predictions = self.diffusion_model_predictions(
-    #         context_latents,
-    #         context_latents_mask,
-    #         times,
-    #         main_self_cond=context_self_cond,
-    #         class_id=class_id,
-    #         sub_latents=embedding_latents,
-    #         sub_latents_mask=embedding_latents_mask,
-    #         diffusion_model=self.context_diffusion_model,
-    #     )
-    #     target = alpha.sqrt() * noise - (1 - alpha).sqrt() * txt_latent
-    #     pred = predictions.pred_v
-    #     loss = self.loss_fn(pred, target, reduction='mean')
-    #     # print(f"loss: {loss.shape}, pred: {pred.shape}, target: {target.shape}")
-    #     return loss.mean()
 
     def embedding_forward(self, embedding_latents, context_latents, embedding_latents_mask, class_id, context_latents_mask, times):
         txt_latent = embedding_latents
@@ -584,14 +503,6 @@ class EdisonGaussianDiffusion(nn.Module):
 
     def forward(self, embedding_latents, context_latents, embedding_latents_mask, class_id, context_latents_mask):
         embedding_times = torch.zeros((embedding_latents.shape[0],)).uniform_(0, 1.).to(embedding_latents.device)
-        # context_times = torch.clamp(embedding_times * self.config.time_difference_embedding_over_context, 0, 1)
-        # loss_context = self.context_forward(
-        #     embedding_latents, context_latents, embedding_latents_mask, class_id, context_latents_mask, context_times
-        # )
-        # loss_embedding = self.embedding_forward(
-        #     embedding_latents, context_latents, embedding_latents_mask, class_id, context_latents_mask, embedding_times
-        # )
-        # loss = loss_context + loss_embedding
         loss = self.forward_context_and_embedding_together(
             embedding_latents, context_latents, embedding_latents_mask, class_id, context_latents_mask, embedding_times
         )
