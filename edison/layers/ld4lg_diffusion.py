@@ -396,7 +396,7 @@ class GaussianDiffusion(nn.Module):
         if self.objective == 'pred_noise':
             pred_noise = model_output
             x_start = self.predict_start_from_noise(z_t, t, pred_noise, sampling=sampling)
-        elif self.objective =='pred_x0':
+        elif self.objective == 'pred_x0':
             x_start = model_output
             pred_noise = self.predict_noise_from_start(z_t, t, x_start, sampling=sampling)
             pred_v = self.predict_v_from_start_and_eps(z_t, t, x_start, pred_noise, sampling=sampling)
