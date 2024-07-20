@@ -250,8 +250,8 @@ class Encoder(BaseEncoder):
                 emb_layers, context_layers, latent, context, rpe_words, rpe_cross, conscious_words, time_emb
             )
             # Dense connection
-            self._maybe_dense_connection(i, latent, emb_hidden_states)
-            self._maybe_dense_connection(i, context, context_hidden_states)
+            latent, emb_hidden_states = self._maybe_dense_connection(i, latent, emb_hidden_states)
+            context, context_hidden_states = self._maybe_dense_connection(i, context, context_hidden_states)
         words_plus_rpe = latent + cpe
         latent = self._forward_last_layers(
             self.last_layers_for_embedding, words_plus_rpe, latent, rpe_words, conscious_words, time_emb
@@ -262,6 +262,7 @@ class Encoder(BaseEncoder):
         return latent
 
     def _forward_layers(self, emb_layers, context_layers, latent, context, rpe_words, rpe_cross, conscious_words, time_emb):
+        # TODO: emb_layers, context_layers 통합하여 동시에 계산하도록 함으로써 속도 개선
         (
             emb_norm1, emb_cross_attn, emb_cross_attn_residual,
             emb_norm2, emb_self_attn, emb_self_attn_residual,

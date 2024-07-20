@@ -125,10 +125,10 @@ class DiffusionTransformer(nn.Module):
         time: timestep, [batch]
         """
 
-        print(f"[DiffusionTransformer.forward] x: {x.shape}, mask: {mask.shape}, time: {time.shape}")
+        # print(f"[DiffusionTransformer.forward] x: {x.shape}, mask: {mask.shape}, time: {time.shape}")
         time_emb = self.time_mlp(time*1000)
         time_emb = rearrange(time_emb, 'b d -> b 1 d')
-        print(f"[DiffusionTransformer.forward] time_emb: {time_emb.shape}")
+        # print(f"[DiffusionTransformer.forward] time_emb: {time_emb.shape}")
 
         if self.class_conditional:
             assert exists(class_id)

@@ -195,7 +195,7 @@ class Diffusion(BaseDiffusion):
         # print(f"[Diffusion.training_step] alpha: {alpha.shape}, noise: {noise.shape}, latent: {latent.shape}, latent.ndim: {latent.ndim}")
         target = alpha.sqrt() * noise - (1 - alpha).sqrt() * latent
         latent = alpha.sqrt() * latent + (1 - alpha).sqrt() * noise
-        # TODO: add context process
+        # TODO: add context process?
 
         # self-conditioning
         self_cond = None

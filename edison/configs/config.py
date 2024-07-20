@@ -187,7 +187,7 @@ class EdisonConfig(Config):
     num_decoder_latents: int = 32
     transformer_decoder: bool = True
     l2_normalize_latents: bool = True
-    encoding_mode: str = 'sentence_only'  # 'sentence_only', 'both_separately', 'both_together'
+    # encoding_mode: str = 'sentence_only'  # 'sentence_only', 'both_separately', 'both_together'
     #############################
     # Edison Diffusion
     # pretrained_ae_path: str = 'lightning_logs/edison_ae_100k/checkpoints/epoch=275-step=100000.ckpt'

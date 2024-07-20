@@ -7,18 +7,19 @@ from transformers.modeling_outputs import BaseModelOutput
 from transformers import AutoTokenizer
 from tqdm import tqdm
 
-from edison.configs.config import Config
+from edison.configs.config import LD4LGConfig, EdisonConfig
 from edison.layers.lm import get_BART
-from edison.layers.edison_autoencoder import EdisonPerceiverAutoEncoder
+# from edison.layers.edison_autoencoder import EdisonPerceiverAutoEncoder
 from edison.layers.ld4lg_diffusion import GaussianDiffusion
-from edison.layers.edison_diffusion import EdisonGaussianDiffusion
+# from edison.layers.edison_diffusion import EdisonGaussianDiffusion
+from edison.layers.draft_autoencoder import AutoEncoder
 from edison.layers.draft_diffusion import Diffusion
 
 
 class LD4LGAE(L.LightningModule):
     def __init__(
         self,
-        config: Config,
+        config: LD4LGConfig,
         lm: torch.nn.Module,
         ae: torch.nn.Module,
     ):
@@ -96,7 +97,7 @@ class LD4LGAE(L.LightningModule):
 class LD4LGDiffusion(L.LightningModule):
     def __init__(
         self,
-        config: Config,
+        config: LD4LGConfig,
         autoencoder: LD4LGAE,
         tokenizer: AutoTokenizer,
     ):
@@ -152,94 +153,94 @@ class LD4LGDiffusion(L.LightningModule):
         return generated_texts
 
 
-class EdisonAE(L.LightningModule):
-    def __init__(
-        self,
-        config: Config,
-    ):
-        super().__init__()
-        self.save_hyperparameters('config')
-        self.config = config
-        self.lm, self.tokenizer = get_BART()
-        # Freeze LM
-        for param in self.lm.parameters():
-            param.requires_grad = False
-        self.lm_input_embeddings = self.lm.get_input_embeddings()
-        self.ae = EdisonPerceiverAutoEncoder(
-            dim_lm=self.config.dim_lm,
-            dim_ae=self.config.dim_ae,
-            num_layers=self.config.num_layers,
-            num_encoder_latents=self.config.num_encoder_latents,
-            num_decoder_latents=self.config.num_decoder_latents,
-            transformer_decoder=self.config.transformer_decoder,
-            l2_normalize_latents=self.config.l2_normalize_latents,
-            encoding_mode=self.config.encoding_mode
-        )
+# class EdisonAE(L.LightningModule):
+#     def __init__(
+#         self,
+#         config: Config,
+#     ):
+#         super().__init__()
+#         self.save_hyperparameters('config')
+#         self.config = config
+#         self.lm, self.tokenizer = get_BART()
+#         # Freeze LM
+#         for param in self.lm.parameters():
+#             param.requires_grad = False
+#         self.lm_input_embeddings = self.lm.get_input_embeddings()
+#         self.ae = EdisonPerceiverAutoEncoder(
+#             dim_lm=self.config.dim_lm,
+#             dim_ae=self.config.dim_ae,
+#             num_layers=self.config.num_layers,
+#             num_encoder_latents=self.config.num_encoder_latents,
+#             num_decoder_latents=self.config.num_decoder_latents,
+#             transformer_decoder=self.config.transformer_decoder,
+#             l2_normalize_latents=self.config.l2_normalize_latents,
+#             encoding_mode=self.config.encoding_mode
+#         )
 
-    def forward(self, batch):
-        """
-        Only Encode forward
-        """
-        inputs = batch['input_ids']
-        attention_masks = batch['attention_mask']
-        encoder_outputs = self.lm.get_encoder()(
-            input_ids=inputs,
-            attention_mask=attention_masks)
-        encoder_outputs = self.ae.encode(
-            encoder_outputs['last_hidden_state'],
-            attention_mask=attention_masks)
-        return encoder_outputs
+#     def forward(self, batch):
+#         """
+#         Only Encode forward
+#         """
+#         inputs = batch['input_ids']
+#         attention_masks = batch['attention_mask']
+#         encoder_outputs = self.lm.get_encoder()(
+#             input_ids=inputs,
+#             attention_mask=attention_masks)
+#         encoder_outputs = self.ae.encode(
+#             encoder_outputs['last_hidden_state'],
+#             attention_mask=attention_masks)
+#         return encoder_outputs
 
-    def encode(self, input_ids, attention_masks, return_embeddings=False):
-        encoder_outputs = self.lm.get_encoder()(
-            input_ids=input_ids,
-            attention_mask=attention_masks)
-        encoder_outputs = self.ae.encode(
-            encoder_outputs['last_hidden_state'],
-            attention_mask=attention_masks)
-        if return_embeddings:
-            embeddings = self.lm_input_embeddings(input_ids)
-            return encoder_outputs, embeddings
-        return encoder_outputs
+#     def encode(self, input_ids, attention_masks, return_embeddings=False):
+#         encoder_outputs = self.lm.get_encoder()(
+#             input_ids=input_ids,
+#             attention_mask=attention_masks)
+#         encoder_outputs = self.ae.encode(
+#             encoder_outputs['last_hidden_state'],
+#             attention_mask=attention_masks)
+#         if return_embeddings:
+#             embeddings = self.lm_input_embeddings(input_ids)
+#             return encoder_outputs, embeddings
+#         return encoder_outputs
 
-    def decode(self, encoder_outputs):
-        ae_decoder_outputs = self.ae.decode(encoder_outputs)
-        outputs_c1 = self.lm(encoder_outputs=ae_decoder_outputs['latents_c1'])
-        outputs_c0 = self.lm(encoder_outputs=ae_decoder_outputs['latents_c0'])
-        return {'logits_c1': outputs_c1['logits'], 'logits_c0': outputs_c0['logits']}
+#     def decode(self, encoder_outputs):
+#         ae_decoder_outputs = self.ae.decode(encoder_outputs)
+#         outputs_c1 = self.lm(encoder_outputs=ae_decoder_outputs['latents_c1'])
+#         outputs_c0 = self.lm(encoder_outputs=ae_decoder_outputs['latents_c0'])
+#         return {'logits_c1': outputs_c1['logits'], 'logits_c0': outputs_c0['logits']}
 
-    def training_step(self, batch, batch_idx):
-        inputs = batch['input_ids']
-        attention_masks = batch['attention_mask']
-        targets = batch['labels']
-        targets_c0 = batch['labels_c0']
-        # LM encoder outputs
-        encoder_outputs = self.lm.get_encoder()(
-            input_ids=inputs,
-            attention_mask=attention_masks)
-        # AE encoder, decoder outputs
-        ae_decoder_outputs = self.ae(
-            encoder_outputs['last_hidden_state'],
-            attention_mask=attention_masks
-        )
-        # LM decoder outputs (loss)
-        encoder_outputs['last_hidden_state'] = ae_decoder_outputs['latents_c1']
-        outputs_c1 = self.lm(labels=targets, encoder_outputs=encoder_outputs)
-        encoder_outputs['last_hidden_state'] = ae_decoder_outputs['latents_c0']
-        outputs_c0 = self.lm(labels=targets_c0, encoder_outputs=encoder_outputs)
-        loss_c1 = outputs_c1.loss
-        loss_c0 = outputs_c0.loss
-        loss = loss_c1 + loss_c0
-        self.log('loss', loss, on_step=True, prog_bar=True)
-        return loss
+#     def training_step(self, batch, batch_idx):
+#         inputs = batch['input_ids']
+#         attention_masks = batch['attention_mask']
+#         targets = batch['labels']
+#         targets_c0 = batch['labels_c0']
+#         # LM encoder outputs
+#         encoder_outputs = self.lm.get_encoder()(
+#             input_ids=inputs,
+#             attention_mask=attention_masks)
+#         # AE encoder, decoder outputs
+#         ae_decoder_outputs = self.ae(
+#             encoder_outputs['last_hidden_state'],
+#             attention_mask=attention_masks
+#         )
+#         # LM decoder outputs (loss)
+#         encoder_outputs['last_hidden_state'] = ae_decoder_outputs['latents_c1']
+#         outputs_c1 = self.lm(labels=targets, encoder_outputs=encoder_outputs)
+#         encoder_outputs['last_hidden_state'] = ae_decoder_outputs['latents_c0']
+#         outputs_c0 = self.lm(labels=targets_c0, encoder_outputs=encoder_outputs)
+#         loss_c1 = outputs_c1.loss
+#         loss_c0 = outputs_c0.loss
+#         loss = loss_c1 + loss_c0
+#         self.log('loss', loss, on_step=True, prog_bar=True)
+#         return loss
 
-    def configure_optimizers(self):
-        optimizer = torch.optim.AdamW(self.ae.parameters(), lr=self.config.learning_rate)
-        scheduler = torch.optim.lr_scheduler.LinearLR(optimizer, start_factor=1, end_factor=0, total_iters=50000)
-        return {
-            'optimizer': optimizer,
-            'lr_scheduler': scheduler,
-        }
+#     def configure_optimizers(self):
+#         optimizer = torch.optim.AdamW(self.ae.parameters(), lr=self.config.learning_rate)
+#         scheduler = torch.optim.lr_scheduler.LinearLR(optimizer, start_factor=1, end_factor=0, total_iters=50000)
+#         return {
+#             'optimizer': optimizer,
+#             'lr_scheduler': scheduler,
+#         }
 
 
 # class EdisonDiffusion(L.LightningModule):
@@ -308,10 +309,93 @@ class EdisonAE(L.LightningModule):
 #         return generated_texts
 
 
+class EdisonAE(L.LightningModule):
+    def __init__(
+        self,
+        config: EdisonConfig,
+    ):
+        super().__init__()
+        self.save_hyperparameters('config')
+        self.config = config
+        self.lm, self.tokenizer = get_BART()
+        # Freeze LM
+        for param in self.lm.parameters():
+            param.requires_grad = False
+        self.lm_input_embeddings = self.lm.get_input_embeddings()
+        self.ae = AutoEncoder(
+            dim_lm=self.config.dim_lm,
+            dim_ae=self.config.dim_ae,
+            num_layers=self.config.num_layers,
+            num_encoder_latents=self.config.num_encoder_latents,
+            num_decoder_latents=self.config.num_decoder_latents,
+            transformer_decoder=self.config.transformer_decoder,
+            l2_normalize_latents=self.config.l2_normalize_latents,
+        )
+
+    def forward(self, batch):
+        """
+        Only Encode forward
+        """
+        inputs = batch['input_ids']
+        attention_masks = batch['attention_mask']
+        encoder_outputs = self.lm.get_encoder()(
+            input_ids=inputs,
+            attention_mask=attention_masks)
+        encoder_outputs = self.ae.encode(
+            encoder_outputs['last_hidden_state'],
+            attention_mask=attention_masks)
+        return encoder_outputs
+
+    def encode(self, input_ids, attention_masks, return_embeddings=False):
+        encoder_outputs = self.lm.get_encoder()(
+            input_ids=input_ids,
+            attention_mask=attention_masks)
+        encoder_outputs = self.ae.encode(
+            encoder_outputs['last_hidden_state'],
+            attention_mask=attention_masks)
+        if return_embeddings:
+            embeddings = self.lm_input_embeddings(input_ids)
+            return encoder_outputs, embeddings
+        return encoder_outputs
+
+    def decode(self, encoder_outputs):
+        ae_decoder_outputs = self.ae.decode(encoder_outputs)
+        output = self.lm(encoder_outputs=ae_decoder_outputs)
+        return output
+
+    def training_step(self, batch, batch_idx):
+        inputs = batch['input_ids']
+        attention_masks = batch['attention_mask']
+        targets = batch['labels']
+        # LM encoder outputs
+        encoder_outputs = self.lm.get_encoder()(
+            input_ids=inputs,
+            attention_mask=attention_masks)
+        # AE encoder, decoder outputs
+        ae_decoder_outputs = self.ae(
+            encoder_outputs['last_hidden_state'],
+            attention_mask=attention_masks
+        )
+        # LM decoder outputs (loss)
+        encoder_outputs['last_hidden_state'] = ae_decoder_outputs
+        output = self.lm(labels=targets, encoder_outputs=encoder_outputs)
+        loss = output.loss
+        self.log('loss', loss, on_step=True, prog_bar=True)
+        return loss
+
+    def configure_optimizers(self):
+        optimizer = torch.optim.AdamW(self.ae.parameters(), lr=self.config.learning_rate)
+        scheduler = torch.optim.lr_scheduler.LinearLR(optimizer, start_factor=1, end_factor=0, total_iters=50000)
+        return {
+            'optimizer': optimizer,
+            'lr_scheduler': scheduler,
+        }
+
+
 class EdisonDiffusion(L.LightningModule):
     def __init__(
         self,
-        config: Config,
+        config: EdisonConfig,
         ae_path: Optional[str] = None,
     ):
         super().__init__()
@@ -328,7 +412,7 @@ class EdisonDiffusion(L.LightningModule):
         self.diffusion_model = Diffusion(config=config)
 
     def forward(self, embedding_latents, context_latents, attention_mask):
-        context_latents = context_latents['latents_c1']  # TODO: 훈련 병목 원인?
+        context_latents = context_latents
 
         loss = self.diffusion_model.training_step(
             latent=embedding_latents,
@@ -347,7 +431,7 @@ class EdisonDiffusion(L.LightningModule):
 
     def configure_optimizers(self):
         optimizer = torch.optim.AdamW(self.diffusion_model.parameters(), lr=self.config.learning_rate)
-        scheduler = torch.optim.lr_scheduler.LinearLR(optimizer, start_factor=1, end_factor=0, total_iters=250000)
+        scheduler = torch.optim.lr_scheduler.LinearLR(optimizer, start_factor=1, end_factor=0, total_iters=self.config.max_steps)
         return {
             'optimizer': optimizer,
             'lr_scheduler': scheduler,

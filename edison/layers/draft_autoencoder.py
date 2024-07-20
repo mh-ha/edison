@@ -95,40 +95,32 @@ class EdisonPerceiverAttention(nn.Module):
     def forward(
         self,
         x: Tensor,
-        latents_c1: Tensor,
-        latents_c0: Tensor,
-        consciousness_mask: Tensor = None,
+        latent: Tensor,
+        attention_mask: Tensor = None,
     ) -> Tuple[Tensor, Tensor]:
         # init
         x = self.norm(x)
-        latents_c1 = self.norm_latents(latents_c1)
-        latents_c0 = self.norm_latents(latents_c0)
+        latent = self.norm_latents(latent)
         h = self.num_heads
 
         # get q, k, v
-        q_c1 = self.to_q(latents_c1)
-        q_c0 = self.to_q(latents_c0)
+        q = self.to_q(latent)
         kv_input = self.to_kv(x)
         k, v = rearrange(kv_input, 'b n (split d) -> split b n d', split=2)
-        q_c1 = rearrange(q_c1, 'b n (h d) -> b h n d', h=h)
-        q_c0 = rearrange(q_c0, 'b n (h d) -> b h n d', h=h)
+        q = rearrange(q, 'b n (h d) -> b h n d', h=h)
         k = rearrange(k, 'b n (h d) -> b h n d', h=h)
         v = rearrange(v, 'b n (h d) -> b h n d', h=h)
 
         # attention
-        attn_c1 = einsum('b h i d, b h j d  -> b h i j', self.query_norm(q_c1) * self.scale, self.key_norm(k))
-        attn_c0 = einsum('b h i d, b h j d  -> b h i j', self.query_norm(q_c0) * self.scale, self.key_norm(k))
-        if exists(consciousness_mask):
-            max_neg_value = -torch.finfo(attn_c1.dtype).max
-            consciousness_mask = rearrange(consciousness_mask, 'b j -> b 1 1 j')
-            attn_c1 = attn_c1.masked_fill(~consciousness_mask, max_neg_value)
-        attn_c1 = attn_c1.softmax(dim=-1, dtype=attn_c1.dtype)
-        attn_c0 = attn_c0.softmax(dim=-1, dtype=attn_c0.dtype)
-        out_c1 = einsum('b h i j, b h j d -> b h i d', attn_c1, v)
-        out_c0 = einsum('b h i j, b h j d -> b h i d', attn_c0, v)
-        out_c1 = rearrange(out_c1, 'b h n d -> b n (h d)', h=h)
-        out_c0 = rearrange(out_c0, 'b h n d -> b n (h d)', h=h)
-        return self.to_out(out_c1), self.to_out(out_c0)
+        attn = einsum('b h i d, b h j d  -> b h i j', self.query_norm(q) * self.scale, self.key_norm(k))
+        if exists(attention_mask):
+            max_neg_value = -torch.finfo(attn.dtype).max
+            attention_mask = rearrange(attention_mask, 'b j -> b 1 1 j')
+            attn = attn.masked_fill(~attention_mask, max_neg_value)
+        attn = attn.softmax(dim=-1, dtype=attn.dtype)
+        out = einsum('b h i j, b h j d -> b h i d', attn, v)
+        out = rearrange(out, 'b h n d -> b n (h d)', h=h)
+        return self.to_out(out)
 
 
 class EdisonPerceiverResampler(nn.Module):
@@ -145,9 +137,8 @@ class EdisonPerceiverResampler(nn.Module):
     ) -> None:
         super().__init__()
         self.pos_emb = AbsolutePositionalEmbedding(dim_input, max_seq_len)
-        self.latents_c1 = nn.Parameter(torch.randn(num_latents, dim_latent))
-        self.latents_c0 = nn.Parameter(torch.randn(num_latents, dim_latent))
-        nn.init.normal_(self.latents_c1, std=0.02)
+        self.learnable_latent = nn.Parameter(torch.randn(num_latents, dim_latent))
+        nn.init.normal_(self.learnable_latent, mean=0, std=0.02)
         self.layers = nn.ModuleList([])
         for _ in range(num_layers):
             self.layers.append(
@@ -161,26 +152,20 @@ class EdisonPerceiverResampler(nn.Module):
             self.l2_normalize_latents = lambda x: x
         self.final_norm = nn.LayerNorm(dim_latent)
 
-    def forward(self, x: Tensor, consciousness_mask: Tensor) -> dict[str, Tensor]:
-        pos_emb = self.pos_emb(x)
-        x = x + pos_emb
-        latents_c1 = repeat(self.latents_c1, 'n d -> b n d', b=x.shape[0])
-        latents_c0 = repeat(self.latents_c0, 'n d -> b n d', b=x.shape[0])
+    def forward(self, latent: Tensor, attention_mask: Tensor) -> dict[str, Tensor]:
+        pos_emb = self.pos_emb(latent)
+        latent = latent + pos_emb
+        learnable_latent = repeat(self.learnable_latent, 'n d -> b n d', b=latent.shape[0])
 
         for attn_layer, ff_layer in self.layers:
-            in_c1 = latents_c1
-            in_c0 = latents_c0
-            latents_c1, latents_c0 = attn_layer(x, latents_c1, latents_c0, consciousness_mask)
-            latents_c1 = latents_c1 + in_c1
-            latents_c0 = latents_c0 + in_c0
-            latents_c1 = ff_layer(latents_c1) + latents_c1
-            latents_c0 = ff_layer(latents_c0) + latents_c0
-        latents_c1 = self.final_norm(latents_c1)
-        latents_c1 = self.l2_normalize_latents(latents_c1)
-        latents_c0 = self.final_norm(latents_c0)
-        latents_c0 = self.l2_normalize_latents(latents_c0)
+            residual = learnable_latent
+            learnable_latent = attn_layer(latent, learnable_latent, attention_mask)
+            learnable_latent = learnable_latent + residual
+            learnable_latent = ff_layer(learnable_latent) + learnable_latent
+        out = self.final_norm(learnable_latent)
+        out = self.l2_normalize_latents(out)
 
-        return {'latents_c1': latents_c1, 'latents_c0': latents_c0}
+        return out
 
 
 class Transformer(nn.Module):
@@ -219,7 +204,7 @@ class Transformer(nn.Module):
         return self.final_norm(x)
 
 
-class EdisonPerceiverAutoEncoder(nn.Module):
+class AutoEncoder(nn.Module):
     def __init__(
         self,
         dim_lm: int,
@@ -244,25 +229,24 @@ class EdisonPerceiverAutoEncoder(nn.Module):
 
     def decode(
         self,
-        ae_latent: dict[str, Tensor]
-    ) -> dict[str, Tensor]:
-        ae_latent_c1 = self.perceiver_decoder(ae_latent['latents_c1'])
-        ae_latent_c0 = self.perceiver_decoder(ae_latent['latents_c0'])
-        return {'latents_c1': ae_latent_c1, 'latents_c0': ae_latent_c0}
+        ae_latent: Tensor
+    ) -> Tensor:
+        decoded = self.perceiver_decoder(ae_latent)
+        return decoded
 
     def encode(
         self,
         encoder_outputs: Tensor,
         attention_mask: Tensor,
-    ) -> dict[str, Tensor]:
-        processed_encoder_outputs = self.perceiver_encoder.forward(encoder_outputs, attention_mask.bool())
-        return processed_encoder_outputs
+    ) -> Tensor:
+        encoded = self.perceiver_encoder.forward(encoder_outputs, attention_mask.bool())
+        return encoded
 
     def forward(
         self,
         encoder_outputs: Tensor,
         attention_mask: Tensor,
-    ) -> dict[str, Tensor]:
+    ) -> Tensor:
         encoder_latents = self.encode(encoder_outputs, attention_mask)
         decoder_outputs = self.decode(encoder_latents)
         return decoder_outputs
