@@ -1,3 +1,5 @@
+from typing import Optional
+
 import lightning as L
 import torch
 from einops import einsum
@@ -10,6 +12,7 @@ from edison.layers.lm import get_BART
 from edison.layers.edison_autoencoder import EdisonPerceiverAutoEncoder
 from edison.layers.ld4lg_diffusion import GaussianDiffusion
 from edison.layers.edison_diffusion import EdisonGaussianDiffusion
+from edison.layers.draft_diffusion import Diffusion
 
 
 class LD4LGAE(L.LightningModule):
@@ -239,46 +242,106 @@ class EdisonAE(L.LightningModule):
         }
 
 
+# class EdisonDiffusion(L.LightningModule):
+#     def __init__(
+#         self,
+#         config: Config,
+#         ae_path: str,
+#     ):
+#         super().__init__()
+#         self.save_hyperparameters('config', 'ae_path')
+#         self.config = config
+#         self.autoencoder = EdisonAE.load_from_checkpoint(
+#                 ae_path,
+#                 map_location='cuda' if torch.cuda.is_available() else 'cpu',
+#                 strict=False,
+#             )
+#         self.autoencoder.freeze()
+#         self.tokenizer = self.autoencoder.tokenizer
+#         self.diffusion_model = EdisonGaussianDiffusion(config=config, device=self.device)
+
+#     def forward(self, embedding_latents, context_latents, attention_mask, class_id=None):
+#         if self.config.use_latents_c0:
+#             NotImplementedError('latents_c0 not implemented')
+#         context_latents = context_latents['latents_c1']
+
+#         embedding_latents_mask = attention_mask
+#         context_latents_mask = torch.ones(context_latents.shape[:2]).to(context_latents.device)
+#         loss = self.diffusion_model(
+#             embedding_latents=embedding_latents,
+#             context_latents=context_latents,
+#             embedding_latents_mask=embedding_latents_mask,
+#             class_id=class_id,
+#             context_latents_mask=context_latents_mask,
+#         )
+#         return loss
+
+#     def training_step(self, batch, batch_idx):
+#         inputs = batch['input_ids']
+#         attention_mask = batch['attention_mask']
+#         class_id = batch['label'] if 'label' in batch else None
+#         context_latents, embedding_latents = self.autoencoder.encode(inputs, attention_mask, return_embeddings=True)
+#         loss = self(embedding_latents, context_latents, attention_mask, class_id)
+#         self.log('loss', loss, on_step=True, prog_bar=True)
+#         return loss
+
+#     def configure_optimizers(self):
+#         optimizer = torch.optim.AdamW(self.diffusion_model.parameters(), lr=self.config.learning_rate)
+#         scheduler = torch.optim.lr_scheduler.LinearLR(optimizer, start_factor=1, end_factor=0, total_iters=250000)
+#         return {
+#             'optimizer': optimizer,
+#             'lr_scheduler': scheduler,
+#         }
+
+#     @torch.no_grad()
+#     def generate(self, num_samples, seq_len, class_id=None, seed=42, batch_size=8):
+#         torch.manual_seed(seed)
+#         generated_texts = []
+#         for i in tqdm(range(0, num_samples, batch_size)):
+#             latents, mask = self.diffusion_model.sample(batch_size, [seq_len]*batch_size, class_id=class_id)
+#             # decode latents to token_ids
+#             sample_ids = einsum(latents, self.autoencoder.lm_input_embeddings.weight, 'b l d, n d -> b l n')
+#             sample_ids = sample_ids.argmax(dim=-1)
+#             texts_list = [self.tokenizer.decode(g, skip_special_tokens=True, clean_up_tokenization_spaces=True) for g in sample_ids]
+#             texts_list = [text.strip() for text in texts_list if len(text.strip()) > 0]
+#             generated_texts.extend(texts_list)
+#         return generated_texts
+
+
 class EdisonDiffusion(L.LightningModule):
     def __init__(
         self,
         config: Config,
-        ae_path: str,
+        ae_path: Optional[str] = None,
     ):
         super().__init__()
         self.save_hyperparameters('config', 'ae_path')
         self.config = config
-        self.autoencoder = EdisonAE.load_from_checkpoint(
-                ae_path,
-                map_location='cuda' if torch.cuda.is_available() else 'cpu',
-                strict=False,
-            )
+        if ae_path is None:
+            self.autoencoder = EdisonAE(config)
+            print("Model initialized.")
+        else:
+            self.autoencoder = EdisonAE.load_from_checkpoint(ae_path)
+            print("Model loaded from checkpoint.")
         self.autoencoder.freeze()
         self.tokenizer = self.autoencoder.tokenizer
-        self.diffusion_model = EdisonGaussianDiffusion(config=config, device=self.device)
+        self.diffusion_model = Diffusion(config=config)
 
-    def forward(self, embedding_latents, context_latents, attention_mask, class_id=None):
-        if self.config.use_latents_c0:
-            NotImplementedError('latents_c0 not implemented')
-        context_latents = context_latents['latents_c1']
+    def forward(self, embedding_latents, context_latents, attention_mask):
+        context_latents = context_latents['latents_c1']  # TODO: 훈련 병목 원인?
 
-        embedding_latents_mask = attention_mask
-        context_latents_mask = torch.ones(context_latents.shape[:2]).to(context_latents.device)
-        loss = self.diffusion_model(
-            embedding_latents=embedding_latents,
-            context_latents=context_latents,
-            embedding_latents_mask=embedding_latents_mask,
-            class_id=class_id,
-            context_latents_mask=context_latents_mask,
+        loss = self.diffusion_model.training_step(
+            latent=embedding_latents,
+            context=context_latents,
+            attention_mask=attention_mask,
         )
         return loss
 
     def training_step(self, batch, batch_idx):
         inputs = batch['input_ids']
         attention_mask = batch['attention_mask']
-        class_id = batch['label'] if 'label' in batch else None
         context_latents, embedding_latents = self.autoencoder.encode(inputs, attention_mask, return_embeddings=True)
-        loss = self(embedding_latents, context_latents, attention_mask, class_id)
+        loss = self(embedding_latents, context_latents, attention_mask)
         self.log('loss', loss, on_step=True, prog_bar=True)
         return loss
 

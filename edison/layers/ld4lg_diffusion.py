@@ -125,8 +125,10 @@ class DiffusionTransformer(nn.Module):
         time: timestep, [batch]
         """
 
+        print(f"[DiffusionTransformer.forward] x: {x.shape}, mask: {mask.shape}, time: {time.shape}")
         time_emb = self.time_mlp(time*1000)
         time_emb = rearrange(time_emb, 'b d -> b 1 d')
+        print(f"[DiffusionTransformer.forward] time_emb: {time_emb.shape}")
 
         if self.class_conditional:
             assert exists(class_id)
@@ -496,6 +498,7 @@ class GaussianDiffusion(nn.Module):
 
         alpha = self.train_schedule(times)  # shape = (batch_size,)
         alpha = right_pad_dims_to(txt_latent, alpha)  # shape = (batch_size, 1, 1)
+        # print(f"[GaussianDiffusion.forward] alpha: {alpha.shape}, noise: {noise.shape}, times: {times.shape}, txt_latent: {txt_latent.shape}")
 
         z_t = alpha.sqrt() * txt_latent + (1-alpha).sqrt() * noise  # shape = (batch_size, max_seq_len, latent_dim)
 

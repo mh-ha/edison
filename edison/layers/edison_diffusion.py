@@ -58,24 +58,6 @@ class DiffusionTransformer(nn.Module):
         self.class_embedding = self._build_class_embedding(tx_dim, num_classes, class_conditional)
         self.null_embedding_seq2seq, self.seq2seq_proj = self._build_seq2seq(seq2seq, seq2seq_context_dim, tx_dim)
 
-        # if is_context_diffusion:
-        #     self.encoder = self._build_encoder(
-        #         tx_dim, embedding_dim, tx_depth, heads, max_seq_len, cross_max_seq_len, is_context_diffusion, num_dense_connections
-        #     )
-        #     self.input_proj = nn.Linear(context_dim * 2 if self_condition else context_dim, tx_dim)
-        #     self.init_self_cond = nn.Parameter(torch.randn(1, context_dim)) if self_condition else None
-        #     self.output_proj = nn.Linear(
-        #         tx_dim * 2 if dense_output_connection else tx_dim, context_dim * 2 if dual_output else context_dim
-        #     )
-        # else:
-        #     self.encoder = self._build_encoder(
-        #         tx_dim, context_dim, tx_depth, heads, max_seq_len, cross_max_seq_len, is_context_diffusion, num_dense_connections
-        #     )
-        #     self.input_proj = nn.Linear(embedding_dim * 2 if self_condition else embedding_dim, tx_dim)
-        #     self.init_self_cond = nn.Parameter(torch.randn(1, embedding_dim)) if self_condition else None
-        #     self.output_proj = nn.Linear(
-        #         tx_dim * 2 if dense_output_connection else tx_dim, embedding_dim * 2 if dual_output else embedding_dim
-        #     )
         self.encoder = self._build_edison_encoder(
             tx_dim, context_dim, tx_depth, heads, max_seq_len, cross_max_seq_len, is_context_diffusion, num_dense_connections
         )
@@ -100,19 +82,6 @@ class DiffusionTransformer(nn.Module):
             nn.Linear(time_emb_dim, time_emb_dim)
         )
 
-    # def _build_encoder(
-    #     self, tx_dim, cross_dim, tx_depth, heads, max_seq_len, cross_max_seq_len, is_context_diffusion, num_dense_connections
-    # ):
-    #     return Encoder(
-    #         dim=tx_dim,
-    #         cross_dim=cross_dim,
-    #         depth=tx_depth,
-    #         num_heads=heads,
-    #         max_seq_len=max_seq_len,
-    #         cross_max_seq_len=cross_max_seq_len,
-    #         is_context_diffusion=is_context_diffusion,
-    #         num_dense_connections=num_dense_connections,
-    #     )
     def _build_edison_encoder(
         self, tx_dim, cross_dim, tx_depth, heads, max_seq_len, cross_max_seq_len, is_context_diffusion, num_dense_connections
     ):
@@ -171,7 +140,6 @@ class DiffusionTransformer(nn.Module):
         main_latents = tx_input
         sub_latents = self.context_input_proj(sub_latents)
 
-        # context, context_mask = self._build_context(embedding_latents, embedding_latents_mask, z_t.shape[0], z_t.device)
         z_t = self.encoder(
             main_latents,
             sub_latents,
@@ -184,19 +152,6 @@ class DiffusionTransformer(nn.Module):
         main_latents = z_t
 
         return main_latents
-
-    # def _build_context(self, seq2seq_cond, seq2seq_cond_mask, batch_size, device):
-    #     context, context_mask = [], []
-    #     if seq2seq_cond is None:
-    #         null_context = repeat(self.null_embedding_seq2seq.weight, '1 d -> b 1 d', b=batch_size)
-    #         context.append(null_context)
-    #         context_mask.append(torch.tensor([[True] for _ in range(batch_size)], dtype=bool, device=device))
-    #     else:
-    #         context.append(self.seq2seq_proj(seq2seq_cond))
-    #         context_mask.append(seq2seq_cond_mask)
-    #     context = torch.cat(context, dim=1)
-    #     context_mask = torch.cat(context_mask, dim=1)
-    #     return context, context_mask
 
 
 class EdisonGaussianDiffusion(nn.Module):

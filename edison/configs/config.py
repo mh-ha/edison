@@ -130,7 +130,8 @@ class LD4LGConfig(Config):
     l2_normalize_latents: bool = True
     #############################
     # LD4LG Diffusion
-    pretrained_ae_path: str = 'lightning_logs/ld4lg_ae/checkpoints/epoch=137-step=50000.ckpt'
+    # pretrained_ae_path: str = 'lightning_logs/ld4lg_ae/checkpoints/epoch=137-step=50000.ckpt'
+    pretrained_ae_path: str = None
     sampling_timesteps: int = 250
     loss_type: str = 'l2'
     objective: str = 'pred_v'
@@ -189,7 +190,8 @@ class EdisonConfig(Config):
     encoding_mode: str = 'sentence_only'  # 'sentence_only', 'both_separately', 'both_together'
     #############################
     # Edison Diffusion
-    pretrained_ae_path: str = 'lightning_logs/edison_ae_100k/checkpoints/epoch=275-step=100000.ckpt'
+    # pretrained_ae_path: str = 'lightning_logs/edison_ae_100k/checkpoints/epoch=275-step=100000.ckpt'
+    pretrained_ae_path: str = None
     sampling_timesteps: int = 250
     loss_type: str = 'l2'
     objective: str = 'pred_v'
@@ -197,6 +199,8 @@ class EdisonConfig(Config):
     train_prob_self_cond: float = 0.5
     tx_dim: int = 768
     tx_depth: int = 12
+    num_attn_heads: int = 12
+    ff_mult: int = 4
     attn_head_dim: int = 64
     latent_dim: int = 64     # must be equal to dim_ae
     lm_dim: int = 768        # must be equal to lm dim(=d_model)

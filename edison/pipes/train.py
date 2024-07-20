@@ -104,8 +104,10 @@ class TrainFunction:
                 lm=lm,
                 ae=ae,
             )
+            print("Model loaded from checkpoint.")
         else:
             model = LD4LGAE(self.config, lm, ae)
+            print("Model initialized.")
         # print(f"debug - model_params : {list(model.ae.parameters())[0]}")
 
         # 3-4. init lightning module using LM, AE, Diffusion

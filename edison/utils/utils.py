@@ -1,6 +1,7 @@
 import math
 import random
 from functools import partial, wraps
+from typing import Optional
 
 import torch
 from torch import nn, Tensor
@@ -120,15 +121,16 @@ def cosine_schedule(
 
 def time_to_alpha(
     t: Tensor,
-    latent_ndim: int,
+    latent_ndim: Optional[int] = None,
     scale: float = 1.,
 ):
     alpha = cosine_schedule(t)
     shifted_log_snr = torch.log((alpha / (1 - alpha))).clamp(min=-15, max=15)
     shifted_log_snr = shifted_log_snr + (2 * math.log(scale))
     shifted_log_snr = torch.sigmoid(shifted_log_snr)
-    if shifted_log_snr.ndim < latent_ndim:
-        shifted_log_snr = shifted_log_snr.unsqueeze(-1)
+    if latent_ndim:
+        while shifted_log_snr.ndim < latent_ndim:
+            shifted_log_snr = shifted_log_snr.unsqueeze(-1)
     return shifted_log_snr
 
 
@@ -136,3 +138,19 @@ def set_seeds(seed):
     random.seed(seed)
     torch.manual_seed(seed)
     torch.cuda.manual_seed(seed)
+
+
+class RMSNorm(nn.Module):
+    def __init__(
+        self,
+        dim: int,
+        eps: float = 1e-8,
+    ) -> None:
+        super().__init__()
+        self.scale = dim ** -0.5
+        self.eps = eps
+        self.gamma = nn.Parameter(torch.ones(dim))
+
+    def forward(self, x: torch.Tensor) -> torch.Tensor:
+        norm = torch.norm(x, dim=-1, keepdim=True) * self.scale
+        return x / norm.clamp(min=self.eps) * self.gamma

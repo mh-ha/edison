@@ -15,7 +15,7 @@ class ScaleShift(nn.Module):
         init_zero_(self.time_mlp[-1])
 
     def forward(self, x, time_emb):
-        scale, shift = self.time_mlp(time_emb).chunk(2, dim=2)
+        scale, shift = self.time_mlp(time_emb).chunk(2, dim=-1)
         x = x * (scale + 1) + shift
         return x
 
