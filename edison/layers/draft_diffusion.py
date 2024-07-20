@@ -80,11 +80,6 @@ class Diffusion(BaseDiffusion):
         pred_start = self._predict_start_from_v(latent, alpha, encoded)
         pred_noise = self._predict_noise_from_v(latent, alpha, encoded)
         pred_v = encoded
-        # TODO: check sampling process: how pred calculation is different from training
-        if self.config.l2_normalize_latents and sampling:
-            pred_start = F.normalize(pred_start, dim=-1) * math.sqrt(pred_start.shape[-1])
-            pred_noise = self._predict_noise_from_start(latent, alpha, pred_start)
-            pred_v = self._predict_v_from_start_and_eps(latent, alpha, pred_start, pred_noise)
         return DiffusionOutput(
             pred_start=pred_start,
             pred_noise=pred_noise,
