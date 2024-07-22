@@ -66,5 +66,8 @@ if __name__ == '__main__':
     )
     generated_data = generated_data['text'].tolist()
 
-    result = evaluate_model(generated_data, reference_data)
-    wandb.log(result)
+    for i in range(5):
+        gen = generated_data[i*1000:(i+1)*1000]
+        ref = reference_data[i*1000:(i+1)*1000]
+        result = evaluate_model(gen, ref)
+        wandb.log(result)
