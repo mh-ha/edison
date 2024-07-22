@@ -17,7 +17,7 @@ from edison.metrics.evaluation import evaluate_model
 # init wandb
 import wandb
 wandb.login()
-wandb.init(project='evaluation_baseline', config={'eval_name': 'baseline'})
+wandb.init(project='experiment_edison', config={'eval_name': 'baseline'})
 
 parser = argparse.ArgumentParser()
 parser.add_argument('--model_path', type=str, default=None, help='path to model checkpoint', required=True)
