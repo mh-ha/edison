@@ -11,7 +11,13 @@ from edison.modules.lightning_modules import (
 )
 from edison.layers.lm import get_BART
 from edison.layers.ld4lg_autoencoder import PerceiverAutoEncoder
+from edison.modules.lightning_data_module import get_dataset
+from edison.metrics.evaluation import evaluate_model
 
+# init wandb
+import wandb
+wandb.login()
+wandb.init(project='evaluation_baseline', config={'eval_name': 'baseline'})
 
 parser = argparse.ArgumentParser()
 parser.add_argument('--model_path', type=str, default=None, help='path to model checkpoint', required=True)
@@ -49,10 +55,16 @@ if __name__ == '__main__':
             )
         model = LD4LGDiffusion.load_from_checkpoint(args.model_path, autoencoder=autoencoder, tokenizer=tokenizer)
 
-    generate_from_model(
+    dataset = get_dataset('roc')
+    reference_data = dataset['valid']['text'] + dataset['test']['text']
+    generated_data = generate_from_model(
         model=model,
         num_samples=args.num_samples,
         batch_size=args.batch_size,
         seq_len=args.seq_len,
         saved_file_name=args.saved_file_name
     )
+    generated_data = generated_data['text'].tolist()
+
+    result = evaluate_model(generated_data, reference_data)
+    wandb.log(result)

@@ -158,7 +158,7 @@ def compute_rouge(all_texts_list, human_references, use_aggregator=True, use_ste
 def evaluate_model(all_texts_list, human_references, model_id='gpt2-large'):
     metrics = {}
     metrics['perplexity'] = compute_perplexity(all_texts_list, model_id)
-    metrics['wordcount'] = compute_wordcount(all_texts_list)
+    # metrics['wordcount'] = compute_wordcount(all_texts_list)
     metrics.update(compute_diversity(all_texts_list))
     metrics['memorization'] = compute_memorization(all_texts_list, human_references)
     metrics['mauve'], metrics['divergence_curve'] = compute_mauve(all_texts_list, human_references, model_id)
