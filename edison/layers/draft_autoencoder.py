@@ -130,7 +130,7 @@ class EdisonPerceiverResampler(nn.Module):
         dim_latent: int,
         num_layers: int,
         dim_head: int = 64,
-        num_latents: int = 16,
+        num_latents: int = 32,
         max_seq_len: int = 64,
         ff_mult: int = 4,
         l2_normalize_latents: bool = False,

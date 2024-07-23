@@ -397,16 +397,20 @@ class EdisonDiffusion(L.LightningModule):
         self,
         config: EdisonConfig,
         ae_path: Optional[str] = None,
+        autoencoder: Optional[EdisonAE] = None,
     ):
         super().__init__()
         self.save_hyperparameters('config', 'ae_path')
         self.config = config
-        if ae_path is None:
-            self.autoencoder = EdisonAE(config)
-            print("Model initialized.")
+        if autoencoder is None:
+            if ae_path is None:
+                self.autoencoder = EdisonAE(config)
+                print("Model initialized.")
+            else:
+                self.autoencoder = EdisonAE.load_from_checkpoint(ae_path)
+                print("Model loaded from checkpoint.")
         else:
-            self.autoencoder = EdisonAE.load_from_checkpoint(ae_path)
-            print("Model loaded from checkpoint.")
+            self.autoencoder = autoencoder
         self.autoencoder.freeze()
         self.tokenizer = self.autoencoder.tokenizer
         self.diffusion_model = Diffusion(config=config)

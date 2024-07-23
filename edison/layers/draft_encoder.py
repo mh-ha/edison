@@ -136,13 +136,13 @@ class Encoder(BaseEncoder):
     """
     def __init__(
         self,
-        internal_dim,
-        depth,
-        num_heads=8,
-        ff_mult=4,
-        max_seq_len=64,
-        context_max_seq_len=32,
-        num_dense_connections=3
+        internal_dim: int,
+        depth: int,
+        num_heads: int = 8,
+        ff_mult: int = 4,
+        max_seq_len: int = 64,
+        context_max_seq_len: int = 32,
+        num_dense_connections: int = 3
     ):
         super().__init__(
             internal_dim=internal_dim,

@@ -87,7 +87,7 @@ class Diffusion(BaseDiffusion):
     def forward(
         self,
         latent: Tensor,
-        context: Tensor,
+        context: Optional[Tensor],
         times: Tensor,
         attention_mask: Optional[Tensor] = None,
         self_cond: Optional[Tensor] = None,
@@ -136,7 +136,7 @@ class Diffusion(BaseDiffusion):
     def encode(
         self,
         latent: Tensor,
-        context: Tensor,
+        context: Optional[Tensor],
         alpha: Tensor,
         attention_mask: Optional[Tensor] = None,
         self_cond: Optional[Tensor] = None,
@@ -152,7 +152,8 @@ class Diffusion(BaseDiffusion):
 
         # input projection
         latent = self.input_proj(latent)
-        context = self.context_input_proj(context)
+        if context:
+            context = self.context_input_proj(context)
 
         # add time embedding
         # print(f"[Diffusion.encode] latent: {latent.shape}, alpha: {alpha.shape}")
@@ -185,7 +186,7 @@ class Diffusion(BaseDiffusion):
     def training_step(
         self,
         latent: Tensor,
-        context: Tensor,
+        context: Optional[Tensor],
         attention_mask: Tensor,
     ) -> Tensor:
         # generate times, noise, alpha, target
