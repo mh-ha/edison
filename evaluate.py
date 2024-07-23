@@ -1,5 +1,7 @@
 import argparse
 
+import pandas as pd
+
 from edison.modules.lightning_data_module import get_dataset
 from edison.metrics.evaluation import evaluate_model
 
@@ -18,8 +20,9 @@ args = parser.parse_args()
 if __name__ == '__main__':
     dataset = get_dataset('roc')
     reference_data = dataset['valid']['text'] + dataset['test']['text']
-    with open(args.gen_path, 'r') as f:
-        generated_data = f.readlines()
+    # with open(args.gen_path, 'r') as f:
+    #     generated_data = f.readlines()
+    generated_data = pd.read_csv(args.gen_path)['text'].tolist()
 
     for i in range(5):
         gen = generated_data[i*1000:(i+1)*1000]
