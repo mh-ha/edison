@@ -41,9 +41,9 @@ class TrainFunction:
         self.trainer.fit(model, train_dataloaders=self.dataloader)
         return model
 
-    def train_diffusion(self, model: Optional[BaseEdisonAE] = None, **kwargs):
+    def train_diffusion(self, autoencoder: Optional[BaseEdisonAE] = None, **kwargs):
         # model
-        diffusion: BaseEdisonDiffusion = get_module(module_name=self.config.diffusion_module_name)(self.config, model)
+        diffusion: BaseEdisonDiffusion = get_module(module_name=self.config.diffusion_module_name)(self.config, autoencoder)
 
         # dataloader
         self.dataloader = get_dataloader_from_name(self.config.dataloader_name)(
@@ -66,5 +66,5 @@ def train(config: Config):
     trainer = TrainFunction(config)
     # model = trainer.train_AE()
     model: BaseEdisonAE = get_module(module_name=config.ae_module_name)(config)
-    model = trainer.train_diffusion(model=model)
+    model = trainer.train_diffusion(autoencoder=model)
     return model

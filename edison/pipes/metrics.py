@@ -36,7 +36,7 @@ def evaluate(all_texts_list, human_references, model_id='gpt2-large', wandb_log=
     if wandb_log:
         wandb.login()
         wandb.init(
-            project=evaluation_name,
+            project='experiment_edison',
             config={
                 "eval_name": evaluation_name,
             },
