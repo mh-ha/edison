@@ -1,4 +1,4 @@
-from typing import Optional
+from typing import Optional, Union
 import math
 from random import random
 
@@ -7,10 +7,10 @@ from torch import nn, Tensor
 import torch.nn.functional as F
 from einops import rearrange, repeat
 
-from edison.configs.config import EdisonConfig
+from edison.configs.config import EdisonConfig, LD4LGConfig
 from edison.layers.base import BaseDiffusion
-from edison.layers.draft_encoder import Encoder
-from edison.layers.positional_embedding import SinusoidalPosEmb
+from edison.layers.draft_encoder import Encoder, BaselineEncoder
+from edison.layers.positional_embedding import SinusoidalPosEmb, AbsolutePositionalEmbedding
 from edison.schemas.model import DiffusionOutput
 import edison.utils.utils as utils
 
@@ -18,36 +18,54 @@ import edison.utils.utils as utils
 class Diffusion(BaseDiffusion):
     def __init__(
         self,
-        config: EdisonConfig,
+        config: Union[EdisonConfig, LD4LGConfig],
     ) -> None:
         super().__init__()
-        # init
-        self.config = config
-        self.self_condition = config.self_condition
-        self.input_dim = config.lm_dim
-        self.internal_dim = config.tx_dim
-        self.output_dim = config.lm_dim
 
         # layers
-        self.encoder = Encoder(
-            internal_dim=self.internal_dim,
-            depth=config.tx_depth,
-            num_heads=config.num_attn_heads,
-            ff_mult=config.ff_mult,
-            max_seq_len=config.max_seq_len,
-            context_max_seq_len=config.num_encoder_latents,
-            num_dense_connections=config.num_dense_connections,
-        )
+        if config.model_name == 'LD4LG':
+            # init
+            self.config = config
+            self.self_condition = config.self_condition
+            self.input_dim = config.latent_dim
+            self.internal_dim = config.tx_dim
+            self.output_dim = config.latent_dim
+            self.encoder = BaselineEncoder(
+                internal_dim=self.internal_dim,
+                depth=config.tx_depth,
+                num_heads=config.num_attn_heads,
+                ff_mult=config.ff_mult,
+                max_seq_len=config.num_encoder_latents,
+                num_dense_connections=config.num_dense_connections,
+            )
+            self.pos_emb = AbsolutePositionalEmbedding(config.tx_dim, config.num_encoder_latents)
+        else:
+            # init
+            self.config = config
+            self.self_condition = config.self_condition
+            self.input_dim = config.lm_dim
+            self.internal_dim = config.tx_dim
+            self.output_dim = config.lm_dim
+            self.encoder = Encoder(
+                internal_dim=self.internal_dim,
+                depth=config.tx_depth,
+                num_heads=config.num_attn_heads,
+                ff_mult=config.ff_mult,
+                max_seq_len=config.max_seq_len,
+                context_max_seq_len=config.num_encoder_latents,
+                num_dense_connections=config.num_dense_connections,
+            )
+            self.pos_emb = None
+            self.context_input_proj = self._build_projection(config.latent_dim, self.internal_dim)
         self.time_mlp = self._build_time_mlp(self.internal_dim, self.internal_dim * config.ff_mult)
         self.time_proj = self._build_time_projection(self.internal_dim * config.ff_mult, self.internal_dim)
         if self.self_condition:
-            self.input_proj = self._build_projection(config.lm_dim * 2, self.internal_dim)
+            self.input_proj = self._build_projection(self.input_dim * 2, self.internal_dim)
             self.learnable_self_cond = nn.Parameter(torch.randn(1, self.input_dim))
             nn.init.normal_(self.learnable_self_cond, mean=0, std=0.02)
         else:
-            self.input_proj = self._build_projection(config.latent_dim, self.internal_dim)
+            self.input_proj = self._build_projection(self.input_dim, self.internal_dim)
             self.learnable_self_cond = None
-        self.context_input_proj = self._build_projection(config.latent_dim, self.internal_dim)
         if config.num_dense_connections < 1:
             self.output_proj = self._build_projection(self.internal_dim, self.output_dim)
         else:
@@ -150,6 +168,12 @@ class Diffusion(BaseDiffusion):
             else:
                 latent = torch.cat((latent, self_cond), dim=-1)
 
+        # positional embedding (optional)
+        if self.pos_emb:
+            pos_emb = self.pos_emb(latent)
+        else:
+            pos_emb = 0.
+
         # input projection
         latent = self.input_proj(latent)
         if context:
@@ -160,7 +184,7 @@ class Diffusion(BaseDiffusion):
         time_emb = self.time_mlp(alpha * 1000)
         time_emb = rearrange(time_emb, 'b d -> b 1 d')
         # print(f"[Diffusion.encode] time_emb: {time_emb.shape}")
-        latent = latent + self.time_proj(time_emb)
+        latent = latent + self.time_proj(time_emb) + pos_emb
 
         # encoding
         encoded = self.encoder(

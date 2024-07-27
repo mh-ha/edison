@@ -107,7 +107,8 @@ class LD4LGDiffusion(L.LightningModule):
         self.autoencoder = autoencoder
         self.autoencoder.freeze()
         self.tokenizer = tokenizer
-        self.diffusion_model = GaussianDiffusion(config=config, device=self.device)
+        # self.diffusion_model = GaussianDiffusion(config=config, device=self.device)
+        self.diffusion_model = Diffusion(config=config)
 
     def forward(self, encoder_outputs, class_id=None):
         mask = torch.ones(
@@ -115,11 +116,16 @@ class LD4LGDiffusion(L.LightningModule):
             self.config.num_encoder_latents,
             dtype=torch.bool,
             device=encoder_outputs.device,)
-        return self.diffusion_model(
-            txt_latent=encoder_outputs,
-            mask=mask,
-            class_id=class_id
-            )
+        return self.diffusion_model.training_step(
+            latent=encoder_outputs,
+            context=None,
+            attention_mask=mask,
+        )
+        # return self.diffusion_model(
+        #     txt_latent=encoder_outputs,
+        #     mask=mask,
+        #     class_id=class_id
+        #     )
 
     def training_step(self, batch, batch_idx):
         inputs = batch['input_ids']

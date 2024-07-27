@@ -139,6 +139,8 @@ class LD4LGConfig(Config):
     train_prob_self_cond: float = 0.5
     tx_dim: int = 768
     tx_depth: int = 12
+    num_attn_heads: int = 12
+    ff_mult: int = 4
     attn_head_dim: int = 64
     latent_dim: int = 64     # must be equal to dim_ae
     lm_dim: int = 768        # must be equal to lm dim(=d_model)

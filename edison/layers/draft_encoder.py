@@ -93,12 +93,13 @@ class Attention(nn.Module):
 
         self.to_out = nn.Linear(self.head_dim*self.num_heads, self.dim)
 
-    def forward(self, words, rpe_words, cross_kv=None, rpe_cross=None):
+    def forward(self, words, rpe_words=None, cross_kv=None, rpe_cross=None):
         # print(f"[Attention.forward.entry] context: {words.shape}, words: {cross_kv.shape}")
         words_kv = words if cross_kv is None else cross_kv
-        rpe_cross = rpe_words if rpe_cross is None else rpe_cross
-        words = words + rpe_words
-        words_kv = words_kv + rpe_cross
+        if rpe_words is not None:
+            rpe_cross = rpe_words if rpe_cross is None else rpe_cross
+            words = words + rpe_words
+            words_kv = words_kv + rpe_cross
         h = self.num_heads
         q = rearrange(self.words_to_q(words), 'b n (h d) -> b h n d', h=h)
         k = rearrange(self.words_to_k(words_kv), 'b n (h d) -> b h n d', h=h)
@@ -318,6 +319,85 @@ class Encoder(BaseEncoder):
             hidden_states.append(words)
             return words, hidden_states
         elif idx >= (len(self.layers_for_embedding) - self.num_dense_connections):
+            words = self.proj_dense_connection(torch.cat([words, hidden_states.pop(-1)], dim=-1))
+            return words, hidden_states
+        else:
+            return words, hidden_states
+
+
+class BaselineEncoder(BaseEncoder):
+    """
+    LD4LG와 동일한 구조
+    """
+    def __init__(
+        self,
+        internal_dim: int,
+        depth: int,
+        num_heads: int = 8,
+        ff_mult: int = 4,
+        max_seq_len: int = 64,
+        num_dense_connections: int = 3
+    ):
+        super().__init__(
+            internal_dim=internal_dim,
+            depth=depth,
+        )
+        self.ff_mult = ff_mult
+        self.num_dense_connections = num_dense_connections
+
+        # Embedding
+        self.layers = nn.ModuleList()
+        for _ in range(depth-1):
+            self.layers.append(
+                nn.ModuleList([
+                    nn.LayerNorm(internal_dim),
+                    Attention(internal_dim, num_heads=num_heads),
+                    GRUGating(internal_dim),
+                    nn.LayerNorm(internal_dim),
+                    FeedForward(internal_dim, ff_mult),
+                    TimeConditionedResidual(internal_dim*ff_mult, internal_dim),
+                ])
+            )
+
+        self.proj_dense_connection = nn.Linear(internal_dim*2, internal_dim)
+
+    def forward(
+        self,
+        latent: Tensor,
+        attention_mask: Tensor,
+        time_emb: Tensor,
+        **kwargs,
+    ) -> Tensor:
+        emb_hidden_states = []
+
+        for i, layers in enumerate(self.layers):
+            latent = self._forward_layers(
+                layers, latent, time_emb, rpe=None
+            )
+            # Dense connection
+            latent, emb_hidden_states = self._maybe_dense_connection(i, latent, emb_hidden_states)
+        return latent
+
+    def _forward_layers(self, layers, latent, time_emb, rpe=None):
+        (
+            emb_norm2, emb_self_attn_2, emb_self_attn_residual_2,
+            emb_norm3, emb_ff, emb_ff_residual
+        ) = layers
+
+        emb_residual = latent
+        latent = emb_self_attn_2(emb_norm2(latent), rpe)
+        latent = emb_self_attn_residual_2(latent, emb_residual)
+
+        emb_residual = latent
+        latent = emb_ff(emb_norm3(latent))
+        latent = emb_ff_residual(latent, emb_residual, time_emb)
+        return latent
+
+    def _maybe_dense_connection(self, idx, words, hidden_states: list):
+        if idx < self.num_dense_connections:
+            hidden_states.append(words)
+            return words, hidden_states
+        elif idx >= (len(self.layers) - self.num_dense_connections):
             words = self.proj_dense_connection(torch.cat([words, hidden_states.pop(-1)], dim=-1))
             return words, hidden_states
         else:
