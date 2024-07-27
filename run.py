@@ -39,7 +39,7 @@ def main():
     elif args.edison_diffusion:
         config = EdisonConfig(train_for='Diffusion', train_batch_size=args.batch_size, max_steps=args.max_steps)
     elif args.ld4lg:
-        config = LD4LGConfig(train_for='AE', train_batch_size=args.batch_size, max_steps=50000)
+        config = LD4LGConfig(train_for='AE', train_batch_size=args.batch_size*2, max_steps=50000)
         autoencoder = train_main(config, **args.__dict__)
         config = LD4LGConfig(train_for='Diffusion', train_batch_size=args.batch_size, max_steps=250000)
         model = train_main(config, autoencoder, **args.__dict__)
