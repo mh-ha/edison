@@ -11,6 +11,7 @@ import os
 from typing import Optional, Union
 
 import torch
+from lightning.pytorch.loggers import WandbLogger
 
 from edison.layers.lm import get_BART
 from edison.layers.ld4lg_autoencoder import PerceiverAutoEncoder
@@ -34,7 +35,8 @@ class TrainFunction:
         2. init lightning data module
         """
         debug = kwargs.get('debug', None)
-        self.trainer = get_trainer(config, debug=debug)
+        wandb_logger = WandbLogger(project="experiment_edison")
+        self.trainer = get_trainer(config, debug=debug, logger=wandb_logger)
         self.dataset = get_dataset(config.dataset_name)
 
     # def train_LD4LG_AE(self, **kwargs):
