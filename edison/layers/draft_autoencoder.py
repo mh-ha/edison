@@ -6,6 +6,8 @@ from torch import nn, einsum, Tensor
 import torch.nn.functional as F
 from einops import rearrange, repeat
 
+from edison.layers import register_module
+from edison.layers.base import BaseAutoEncoder
 from edison.layers.positional_embedding import AbsolutePositionalEmbedding
 from edison.utils.utils import exists, divisible_by, RMSNorm
 
@@ -204,7 +206,8 @@ class Transformer(nn.Module):
         return self.final_norm(x)
 
 
-class AutoEncoder(nn.Module):
+@register_module(name="autoencoder")
+class AutoEncoder(BaseAutoEncoder):
     def __init__(
         self,
         dim_lm: int,
@@ -229,9 +232,9 @@ class AutoEncoder(nn.Module):
 
     def decode(
         self,
-        ae_latent: Tensor
+        encoder_outputs: Tensor
     ) -> Tensor:
-        decoded = self.perceiver_decoder(ae_latent)
+        decoded = self.perceiver_decoder(encoder_outputs)
         return decoded
 
     def encode(

@@ -1,30 +1,34 @@
 from typing import Optional, Union
 
-import lightning as L
 import torch
 from einops import einsum
 from tqdm import tqdm
 
-from edison.configs.config import LD4LGConfig, EdisonConfig
+from edison.configs.base import Config
+from edison.layers import get_module as get_layer_module
 from edison.layers.lm import get_BART
-from edison.layers.draft_autoencoder import AutoEncoder
+from edison.layers.base import BaseAutoEncoder, BaseDiffusion, BaseEncoder
 from edison.layers.draft_diffusion import Diffusion
+from edison.modules import register_module
+from edison.modules.base import BaseEdisonAE, BaseEdisonDiffusion   # noqa: F401
 
 
-class EdisonAE(L.LightningModule):
+@register_module(name='edison_ae')
+class EdisonAE(BaseEdisonAE):
     def __init__(
         self,
-        config: Union[EdisonConfig, LD4LGConfig],
+        config: Config,
     ):
         super().__init__()
         self.save_hyperparameters('config')
         self.config = config
+
         self.lm, self.tokenizer = get_BART()
-        # Freeze LM
         for param in self.lm.parameters():
             param.requires_grad = False
         self.lm_input_embeddings = self.lm.get_input_embeddings()
-        self.ae = AutoEncoder(
+
+        self.ae = get_layer_module(module_name="autoencoder")(
             dim_lm=self.config.dim_lm,
             dim_ae=self.config.dim_ae,
             num_layers=self.config.num_layers,
@@ -94,10 +98,11 @@ class EdisonAE(L.LightningModule):
         }
 
 
-class EdisonDiffusion(L.LightningModule):
+@register_module(name='edison_diffusion')
+class EdisonDiffusion(BaseEdisonDiffusion):
     def __init__(
         self,
-        config: Union[EdisonConfig, LD4LGConfig],
+        config: Config,
         ae_path: Optional[str] = None,
         autoencoder: Optional[EdisonAE] = None,
     ):
@@ -115,7 +120,7 @@ class EdisonDiffusion(L.LightningModule):
             self.autoencoder = autoencoder
         self.autoencoder.freeze()
         self.tokenizer = self.autoencoder.tokenizer
-        self.diffusion_model = Diffusion(config=config)
+        self.diffusion_model = get_layer_module(module_name="diffusion")(config=config)
 
     def forward(self, embedding_latents, context_latents, attention_mask):
         loss = self.diffusion_model.training_step(

@@ -8,6 +8,7 @@ import torch.nn.functional as F
 from einops import rearrange, repeat
 
 from edison.configs.config import EdisonConfig, LD4LGConfig
+from edison.layers import register_module
 from edison.layers.base import BaseDiffusion
 from edison.layers.draft_encoder import Encoder, BaselineEncoder
 from edison.layers.positional_embedding import SinusoidalPosEmb, AbsolutePositionalEmbedding
@@ -15,6 +16,7 @@ from edison.schemas.model import DiffusionOutput
 import edison.utils.utils as utils
 
 
+@register_module(name="diffusion")
 class Diffusion(BaseDiffusion):
     def __init__(
         self,
