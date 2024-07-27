@@ -1,7 +1,9 @@
-from typing import Callable
-from typing import Type
+from typing import Callable, Type
+from pathlib import Path
 
 from lightning import LightningModule
+
+from edison.utils.file_utils import import_all_modules
 
 
 _supported_modules = {}
@@ -18,3 +20,7 @@ def register_module(name: str) -> Callable[[Type[LightningModule]], Type[Lightni
 def get_module(module_name: str) -> Type[LightningModule]:
     assert module_name in _supported_modules, f"There is no module: {module_name}"
     return _supported_modules[module_name]
+
+
+FILE_ROOT = Path(__file__).parent
+import_all_modules(FILE_ROOT, "edison.modules")

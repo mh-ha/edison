@@ -1,12 +1,10 @@
-from typing import Union
-
 import pandas as pd
 
-from edison.modules.draft_lightning_modules import LD4LGDiffusion, EdisonDiffusion
+from edison.modules.base import BaseEdisonDiffusion
 
 
 def generate_from_model(
-    model: Union[LD4LGDiffusion, EdisonDiffusion],
+    model: BaseEdisonDiffusion,
     num_samples: int = 100,
     batch_size: int = 32,
     seq_len: int = 64,

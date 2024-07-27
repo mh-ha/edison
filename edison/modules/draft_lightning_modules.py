@@ -1,4 +1,4 @@
-from typing import Optional, Union
+from typing import Optional
 
 import torch
 from einops import einsum
@@ -6,9 +6,8 @@ from tqdm import tqdm
 
 from edison.configs.base import Config
 from edison.layers import get_module as get_layer_module
+from edison.layers.base import BaseDiffusion
 from edison.layers.lm import get_BART
-from edison.layers.base import BaseAutoEncoder, BaseDiffusion, BaseEncoder
-from edison.layers.draft_diffusion import Diffusion
 from edison.modules import register_module
 from edison.modules.base import BaseEdisonAE, BaseEdisonDiffusion   # noqa: F401
 
@@ -19,9 +18,8 @@ class EdisonAE(BaseEdisonAE):
         self,
         config: Config,
     ):
-        super().__init__()
+        super().__init__(config=config)
         self.save_hyperparameters('config')
-        self.config = config
 
         self.lm, self.tokenizer = get_BART()
         for param in self.lm.parameters():
@@ -80,8 +78,7 @@ class EdisonAE(BaseEdisonAE):
         # AE encoder, decoder outputs
         ae_decoder_outputs = self.ae(
             encoder_outputs['last_hidden_state'],
-            attention_mask=attention_masks
-        )
+            attention_mask=attention_masks)
         # LM decoder outputs (loss)
         encoder_outputs['last_hidden_state'] = ae_decoder_outputs
         output = self.lm(labels=targets, encoder_outputs=encoder_outputs)
@@ -91,7 +88,7 @@ class EdisonAE(BaseEdisonAE):
 
     def configure_optimizers(self):
         optimizer = torch.optim.AdamW(self.ae.parameters(), lr=self.config.learning_rate)
-        scheduler = torch.optim.lr_scheduler.LinearLR(optimizer, start_factor=1, end_factor=0, total_iters=50000)
+        scheduler = torch.optim.lr_scheduler.LinearLR(optimizer, start_factor=1, end_factor=0, total_iters=self.config.max_steps_ae)
         return {
             'optimizer': optimizer,
             'lr_scheduler': scheduler,
@@ -103,24 +100,20 @@ class EdisonDiffusion(BaseEdisonDiffusion):
     def __init__(
         self,
         config: Config,
-        ae_path: Optional[str] = None,
         autoencoder: Optional[EdisonAE] = None,
     ):
-        super().__init__()
-        self.save_hyperparameters('config', 'ae_path')
-        self.config = config
+        super().__init__(config=config, autoencoder=autoencoder)
+        self.save_hyperparameters('config')
         if autoencoder is None:
-            if ae_path is None:
+            if self.config.pretrained_ae_path is None:
                 self.autoencoder = EdisonAE(config)
                 print("Model initialized.")
             else:
-                self.autoencoder = EdisonAE.load_from_checkpoint(ae_path)
+                self.autoencoder = EdisonAE.load_from_checkpoint(self.config.pretrained_ae_path)
                 print("Model loaded from checkpoint.")
-        else:
-            self.autoencoder = autoencoder
         self.autoencoder.freeze()
         self.tokenizer = self.autoencoder.tokenizer
-        self.diffusion_model = get_layer_module(module_name="diffusion")(config=config)
+        self.diffusion_model: BaseDiffusion = get_layer_module(module_name="diffusion_layer")(config=config)
 
     def forward(self, embedding_latents, context_latents, attention_mask):
         loss = self.diffusion_model.training_step(
@@ -133,18 +126,14 @@ class EdisonDiffusion(BaseEdisonDiffusion):
     def training_step(self, batch, batch_idx):
         inputs = batch['input_ids']
         attention_mask = batch['attention_mask']
-        if self.config.model_name == 'LD4LG':
-            embedding_latents = self.autoencoder.encode(inputs, attention_mask, return_embeddings=False)
-            context_latents = None
-        else:
-            context_latents, embedding_latents = self.autoencoder.encode(inputs, attention_mask, return_embeddings=True)
+        context_latents, embedding_latents = self.autoencoder.encode(inputs, attention_mask, return_embeddings=True)
         loss = self(embedding_latents, context_latents, attention_mask)
         self.log('loss', loss, on_step=True, prog_bar=True)
         return loss
 
     def configure_optimizers(self):
         optimizer = torch.optim.AdamW(self.diffusion_model.parameters(), lr=self.config.learning_rate)
-        scheduler = torch.optim.lr_scheduler.LinearLR(optimizer, start_factor=1, end_factor=0, total_iters=self.config.max_steps)
+        scheduler = torch.optim.lr_scheduler.LinearLR(optimizer, start_factor=1, end_factor=0, total_iters=self.config.max_steps_diffusion)
         return {
             'optimizer': optimizer,
             'lr_scheduler': scheduler,
@@ -156,6 +145,65 @@ class EdisonDiffusion(BaseEdisonDiffusion):
         generated_texts = []
         for i in tqdm(range(0, num_samples, batch_size)):
             latents, mask = self.diffusion_model.sample(batch_size, [seq_len]*batch_size, class_id=class_id)
+            # decode latents to token_ids
+            sample_ids = einsum(latents, self.autoencoder.lm_input_embeddings.weight, 'b l d, n d -> b l n')
+            sample_ids = sample_ids.argmax(dim=-1)
+            texts_list = [self.tokenizer.decode(g, skip_special_tokens=True, clean_up_tokenization_spaces=True) for g in sample_ids]
+            texts_list = [text.strip() for text in texts_list if len(text.strip()) > 0]
+            generated_texts.extend(texts_list)
+        return generated_texts
+
+
+@register_module(name='baseline_diffusion')
+class BaselineDiffusion(BaseEdisonDiffusion):
+    def __init__(
+        self,
+        config: Config,
+        autoencoder: Optional[EdisonAE] = None,
+    ):
+        super().__init__(config=config, autoencoder=autoencoder)
+        self.save_hyperparameters('config')
+        if autoencoder is None:
+            if self.config.pretrained_ae_path is None:
+                self.autoencoder = EdisonAE(config)
+                print("Model initialized.")
+            else:
+                self.autoencoder = EdisonAE.load_from_checkpoint(self.config.pretrained_ae_path)
+                print("Model loaded from checkpoint.")
+        self.autoencoder.freeze()
+        self.tokenizer = self.autoencoder.tokenizer
+        self.diffusion_model: BaseDiffusion = get_layer_module(module_name="baseline_diffusion_layer")(config=config)
+
+    def forward(self, latents, context_latents, attention_mask):
+        loss = self.diffusion_model.training_step(
+            latent=latents,
+            context=context_latents,
+            attention_mask=attention_mask,)
+        return loss
+
+    def training_step(self, batch, batch_idx):
+        inputs = batch['input_ids']
+        attention_mask = batch['attention_mask']
+        latents = self.autoencoder.encode(inputs, attention_mask, return_embeddings=False)
+        context_latents = None
+        loss = self(latents, context_latents, attention_mask)
+        self.log('loss', loss, on_step=True, prog_bar=True)
+        return loss
+
+    def configure_optimizers(self):
+        optimizer = torch.optim.AdamW(self.diffusion_model.parameters(), lr=self.config.learning_rate)
+        scheduler = torch.optim.lr_scheduler.LinearLR(optimizer, start_factor=1, end_factor=0, total_iters=self.config.max_steps_diffusion)
+        return {
+            'optimizer': optimizer,
+            'lr_scheduler': scheduler,
+        }
+
+    @torch.no_grad()
+    def generate(self, num_samples, seq_len, class_id=None, seed=42, batch_size=8):
+        torch.manual_seed(seed)
+        generated_texts = []
+        for i in tqdm(range(0, num_samples, batch_size)):
+            latents, mask = self.diffusion_model.sample(batch_size, [seq_len]*batch_size)
             # decode latents to token_ids
             sample_ids = einsum(latents, self.autoencoder.lm_input_embeddings.weight, 'b l d, n d -> b l n')
             sample_ids = sample_ids.argmax(dim=-1)

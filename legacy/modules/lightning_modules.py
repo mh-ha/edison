@@ -13,7 +13,7 @@ from edison.layers.lm import get_BART
 from edison.layers.ld4lg_diffusion import GaussianDiffusion
 # from edison.layers.edison_diffusion import EdisonGaussianDiffusion
 from edison.layers.draft_autoencoder import AutoEncoder
-from edison.layers.draft_diffusion import Diffusion
+from edison.layers.draft_diffusion import DiffusionLayer
 
 
 class LD4LGAE(L.LightningModule):
@@ -108,7 +108,7 @@ class LD4LGDiffusion(L.LightningModule):
         self.autoencoder.freeze()
         self.tokenizer = tokenizer
         # self.diffusion_model = GaussianDiffusion(config=config, device=self.device)
-        self.diffusion_model = Diffusion(config=config)
+        self.diffusion_model = DiffusionLayer(config=config)
 
     def forward(self, encoder_outputs, class_id=None):
         mask = torch.ones(
@@ -419,7 +419,7 @@ class EdisonDiffusion(L.LightningModule):
             self.autoencoder = autoencoder
         self.autoencoder.freeze()
         self.tokenizer = self.autoencoder.tokenizer
-        self.diffusion_model = Diffusion(config=config)
+        self.diffusion_model = DiffusionLayer(config=config)
 
     def forward(self, embedding_latents, context_latents, attention_mask):
         context_latents = context_latents

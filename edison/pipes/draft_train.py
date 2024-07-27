@@ -1,10 +1,12 @@
+
 import os
 from typing import Optional
 
 from lightning.pytorch.loggers import WandbLogger
 
+from edison.modules import get_module
 from edison.modules.base import BaseEdisonAE, BaseEdisonDiffusion
-from edison.modules.lightning_data_module import get_dataset, get_dataloader, get_xtdataloader
+from edison.modules.draft_lightning_data_modules import get_dataset, get_dataloader_from_name
 from edison.pipes.trainer import get_trainer
 from edison.configs.base import Config
 
@@ -13,43 +15,56 @@ os.environ["TOKENIZERS_PARALLELISM"] = "false"
 
 
 class TrainFunction:
+    """
+    abstract level.
+    """
     def __init__(self, config: Config, **kwargs):
         self.config = config
-        debug = kwargs.get('debug', None)
-        wandb_logger = WandbLogger(project="experiment_edison")
-        self.trainer = get_trainer(config, debug=debug, logger=wandb_logger)
+        self.wandb_logger = WandbLogger(project=self.config.project_name)
+        # self.trainer = get_trainer(config, logger=self.wandb_logger)
         self.dataset = get_dataset(config.dataset_name)
 
     def train_AE(self, **kwargs):
-        model = EdisonAE(self.config)
+        # model
+        model: BaseEdisonAE = get_module(module_name=self.config.ae_module_name)(self.config)
 
-        self.dataloader = get_xtdataloader(
+        # dataloader
+        self.dataloader = get_dataloader_from_name(self.config.dataloader_name)(
             self.config,
             self.dataset['train'],
-            model.lm._get_decoder_start_token_id(),
-            model.tokenizer,
+            model,
             self.config.max_seq_len,
-            self.config.min_buffer_size,
             mode='ae',)
 
+        # train
+        self.trainer = get_trainer(self.config, logger=self.wandb_logger, max_steps=self.config.max_steps_ae)
         self.trainer.fit(model, train_dataloaders=self.dataloader)
         return model
 
     def train_diffusion(self, model: Optional[BaseEdisonAE] = None, **kwargs):
-        checkpoint_path = kwargs.get('ae_checkpoint_path', None)
-        ae_path = checkpoint_path if checkpoint_path else self.config.pretrained_ae_path
+        # model
+        diffusion: BaseEdisonDiffusion = get_module(module_name=self.config.diffusion_module_name)(self.config, model)
 
-        diffusion = EdisonDiffusion(self.config, ae_path, model)
-
-        self.dataloader = get_xtdataloader(
+        # dataloader
+        self.dataloader = get_dataloader_from_name(self.config.dataloader_name)(
             self.config,
             self.dataset['train'],
-            diffusion.autoencoder.lm._get_decoder_start_token_id(),
-            diffusion.tokenizer,
+            diffusion.autoencoder,
             self.config.max_seq_len,
-            self.config.min_buffer_size,
-            mode='diffusion',
-        )
+            mode='diffusion',)
 
+        # train
+        self.trainer = get_trainer(self.config, logger=self.wandb_logger, max_steps=self.config.max_steps_diffusion)
         self.trainer.fit(diffusion, train_dataloaders=self.dataloader)
         return diffusion
+
+
+def train(config: Config):
+    """
+    high-level function.
+    """
+    trainer = TrainFunction(config)
+    # model = trainer.train_AE()
+    model: BaseEdisonAE = get_module(module_name=config.ae_module_name)(config)
+    model = trainer.train_diffusion(model=model)
+    return model

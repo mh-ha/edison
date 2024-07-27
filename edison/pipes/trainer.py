@@ -1,18 +1,18 @@
 import lightning as L
-from lightning.pytorch.strategies import DDPStrategy
+# from lightning.pytorch.strategies import DDPStrategy
 from lightning.pytorch.profilers import PyTorchProfiler
 
-from edison.configs.config import Config
+from edison.configs.base import Config
 
 
 # TODO: 상세하게 구현
-def get_trainer(config: Config, debug=None, logger=None):
+def get_trainer(config: Config, debug=None, logger=None, max_steps=250000):
     trainer = L.Trainer(
         # strategy=DDPStrategy(find_unused_parameters=True),
-        logger=logger,
+        # logger=logger,
         # max_epochs=1,
         # num_nodes=3,
-        max_steps=config.max_steps,
+        max_steps=max_steps,
         # precision=16,
         gradient_clip_val=config.gradient_clip_val,
         gradient_clip_algorithm=config.gradient_clip_algorithm,

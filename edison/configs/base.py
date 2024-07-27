@@ -1,4 +1,4 @@
-from typing import Optional, Union
+# from typing import Optional, Union
 from dataclasses import dataclass
 
 
@@ -6,13 +6,16 @@ from dataclasses import dataclass
 class Config:
     #############################
     # Edison general
+    project_name: str = 'experiment_edison'
     model_name: str = 'Edison'
     train_for: str = 'AE'
     dataset_name: str = 'roc'
+    dataloader_name: str = 'get_dataloader'
     gradient_clip_val: float = 1.0
     gradient_clip_algorithm: str = 'norm'
     gradient_accumulation_steps: int = 1
-    max_steps: int = 250000
+    max_steps_ae: int = 50000
+    max_steps_diffusion: int = 250000
     train_batch_size: int = 256
     max_seq_len: int = 64
     learning_rate: float = 1e-4  # 1e-4 for AE, 2e-4 for diffusion
@@ -29,6 +32,7 @@ class Config:
     buffer_sampling_ratio: float = 0.5   # ratio -> vocab, (1-ratio) -> batch
     ############################
     # Edison AE
+    ae_module_name: str = 'edison_ae'
     dim_lm: int = 768
     dim_ae: int = 64
     num_layers: int = 3
@@ -36,9 +40,9 @@ class Config:
     num_decoder_latents: int = 32
     transformer_decoder: bool = True
     l2_normalize_latents: bool = True
-    # encoding_mode: str = 'sentence_only'  # 'sentence_only', 'both_separately', 'both_together'
     #############################
     # Edison Diffusion
+    diffusion_module_name: str = 'baseline_diffusion'
     # pretrained_ae_path: str = 'lightning_logs/edison_ae_100k/checkpoints/epoch=275-step=100000.ckpt'
     pretrained_ae_path: str = None
     sampling_timesteps: int = 250

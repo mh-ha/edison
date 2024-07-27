@@ -4,10 +4,13 @@ from typing import Optional
 from torch import Tensor
 from lightning import LightningModule
 
+from edison.configs.base import Config
+
 
 class BaseEdisonAE(LightningModule, ABC):
-    def __init__(self):
+    def __init__(self, config: Config):
         super().__init__()
+        self.config = config
 
     @abstractmethod
     def forward(self):
@@ -31,8 +34,12 @@ class BaseEdisonAE(LightningModule, ABC):
 
 
 class BaseEdisonDiffusion(LightningModule, ABC):
-    def __init__(self):
+    def __init__(self, config: Config, autoencoder: Optional[BaseEdisonAE]):
         super().__init__()
+        self.config = config
+        self.autoencoder = autoencoder
+        # assert (self.autoencoder is not None) or (self.config.pretrained_ae_path is not None), \
+        #     "autoencoder and pretrained_ae_path cannot be None at the same time"
 
     @abstractmethod
     def forward(
