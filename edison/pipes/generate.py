@@ -2,7 +2,7 @@ from typing import Union
 
 import pandas as pd
 
-from edison.modules.lightning_modules import LD4LGDiffusion, EdisonDiffusion
+from edison.modules.draft_lightning_modules import LD4LGDiffusion, EdisonDiffusion
 
 
 def generate_from_model(

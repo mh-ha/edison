@@ -8,15 +8,10 @@
     4) edison - Diffusion
 """
 import os
-from typing import Optional, Union
+from typing import Optional
 
-import torch
 from lightning.pytorch.loggers import WandbLogger
 
-from edison.layers.lm import get_BART
-from edison.layers.ld4lg_autoencoder import PerceiverAutoEncoder
-# from edison.modules.lightning_modules import LD4LGAE, LD4LGDiffusion, EdisonAE, EdisonDiffusion
-from edison.modules.lightning_modules import LD4LGAE, LD4LGDiffusion
 from edison.modules.draft_lightning_modules import EdisonAE, EdisonDiffusion
 from edison.modules.lightning_data_module import get_dataset, get_dataloader, get_xtdataloader
 from edison.pipes.trainer import get_trainer
@@ -156,7 +151,7 @@ class TrainFunction:
         self.trainer.fit(model, train_dataloaders=self.dataloader)
         return model
 
-    def train_LD4LG_Diffusion(self, model: Union[LD4LGAE, EdisonAE, None] = None, **kwargs):
+    def train_LD4LG_Diffusion(self, model: Optional[EdisonAE] = None, **kwargs):
         # 1-2. load pretrained LM and AE
         checkpoint_path = kwargs.get('ae_checkpoint_path', None)
         ae_path = checkpoint_path if checkpoint_path else self.config.pretrained_ae_path
@@ -237,7 +232,7 @@ class TrainFunction:
         return diffusion
 
 
-def main(config: Config, model: Union[LD4LGAE, EdisonAE, None] = None, **kwargs):
+def main(config: Config, model: Optional[EdisonAE] = None, **kwargs):
     debug = kwargs.get('debug', None)
     if debug:
         print("##### Debug Mode #####")
