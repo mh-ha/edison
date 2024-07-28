@@ -1,4 +1,4 @@
-from typing import Optional
+from typing import Optional, List
 import math
 from random import random
 
@@ -6,6 +6,7 @@ import torch
 from torch import nn, Tensor
 import torch.nn.functional as F
 from einops import rearrange, repeat
+from tqdm import tqdm
 
 from edison.configs.base import Config
 from edison.layers import register_module
@@ -105,7 +106,7 @@ class DiffusionLayer(BaseDiffusion):
 
         # input projection
         latent = self.input_proj(latent)
-        if context:
+        if context is not None:
             context = self.context_input_proj(context)
 
         # add time embedding
@@ -179,78 +180,58 @@ class DiffusionLayer(BaseDiffusion):
         loss = self.loss_fn(pred, target, reduction='mean')
         return loss
 
-    def _get_sampling_timesteps(self, batch, device, invert=False):
-        times = torch.linspace(1., 0., self.sampling_timesteps + 1, device=device)
-        if invert:
-            times = times.flip(dims=(0,))
-        times = times.unsqueeze(0).repeat(batch, 1)
-        times = torch.stack((times[:, :-1], times[:, 1:]), dim=0)
-        return times.unbind(dim=-1)
-
     @torch.no_grad()
-    def _ddpm_sample(
+    def ddpm_sample(
         self,
-        batch_size,
-        lengths,
-        invert=False,
-        context_z_t=None,
-        embedding_z_t=None,
+        batch_size: int,
+        lengths: List[int],
     ):
-        device = next(self.embedding_diffusion_model.parameters()).device
-        time_pairs = self._get_sampling_timesteps(batch_size, device, invert)
+        device = next(self.encoder.parameters()).device
+        time_pairs = utils.get_sampling_timesteps(batch_size, self.config.sampling_timesteps, device)
 
-        context_shape = (batch_size, self.config.num_encoder_latents, self.latent_dim)
-        context_z_t = torch.randn(context_shape, device=device) if context_z_t is None else context_z_t
-        context_mask = [[True] * length + [False] * (self.config.num_encoder_latents - length) for length in lengths]
-        context_mask = torch.tensor(context_mask, dtype=torch.bool, device=device)
+        context_shape = (batch_size, self.config.num_encoder_latents, self.config.latent_dim)
+        context_latent = torch.randn(context_shape, device=device)
+        # context_mask = [[True] * length + [False] * (self.config.num_encoder_latents - length) for length in lengths]
+        # context_mask = torch.tensor(context_mask, dtype=torch.bool, device=device)
 
-        embedding_shape = (batch_size, self.max_seq_len, self.config.tx_dim)
-        embedding_z_t = torch.randn(embedding_shape, device=device) if embedding_z_t is None else embedding_z_t
-        embedding_mask = [[True] * length + [False] * (self.max_seq_len - length) for length in lengths]
+        embedding_shape = (batch_size, self.config.max_seq_len, self.config.tx_dim)
+        embedding_latent = torch.randn(embedding_shape, device=device)
+        embedding_mask = [[True] * length + [False] * (self.config.max_seq_len - length) for length in lengths]
         embedding_mask = torch.tensor(embedding_mask, dtype=torch.bool, device=device)
-        embedding_x_start = None
+        self_cond = None
 
         from tqdm import tqdm
-        for time, time_next in tqdm(time_pairs, desc='sampling loop time step', total=self.sampling_timesteps):
-            embedding_output = self.diffusion_model_predictions(
-                embedding_z_t,
-                embedding_mask,
-                time,
-                main_self_cond=embedding_x_start,
-                sub_latents=context_z_t,
-                sub_latents_mask=context_mask,
-                diffusion_model=self.embedding_diffusion_model,
-            )
-            embedding_x_start = embedding_output.pred_x_start
+        for time, time_next in tqdm(time_pairs, desc='sampling loop time step', total=self.config.sampling_timesteps):
+            embedding_output = self.forward(
+                embedding_latent,
+                context=context_latent,
+                times=time,
+                attention_mask=embedding_mask,
+                self_cond=self_cond,)
+            embedding_x_start = embedding_output.pred_start
             embedding_eps = embedding_output.pred_noise
 
-            alpha, alpha_next = self._get_alpha(embedding_z_t, time, True), self._get_alpha(embedding_z_t, time_next, True)
+            alpha = utils.time_to_alpha(time, embedding_latent.ndim)
+            alpha_next = utils.time_to_alpha(time_next, embedding_latent.ndim)
             alpha_now = alpha / alpha_next
 
             if time_next[0] <= 0:
-                embedding_z_t = embedding_x_start
+                embedding_latent = embedding_x_start
                 continue
-            embedding_noise = torch.randn_like(embedding_z_t)
-            embedding_z_t = 1 / alpha_now.sqrt() * (embedding_z_t - (1 - alpha_now) / (1 - alpha).sqrt() * embedding_eps)
-            embedding_z_t = embedding_z_t + (torch.sqrt(1 - alpha_now) * embedding_noise)
 
-        return embedding_z_t, embedding_mask
+            embedding_noise = torch.randn_like(embedding_latent)
+            embedding_latent = 1 / alpha_now.sqrt() * (embedding_latent - (1 - alpha_now) / (1 - alpha).sqrt() * embedding_eps)
+            embedding_latent = embedding_latent + (torch.sqrt(1 - alpha_now) * embedding_noise)
+
+        return embedding_latent, embedding_mask
 
     def sample(
         self,
-        batch_size,
-        lengths,
-        invert=False,
-        context_z_t=None,
-        embedding_z_t=None,
+        batch_size: int,
+        lengths: List[int],
     ):
-        return self._ddpm_sample(
-            batch_size,
-            lengths,
-            invert=invert,
-            context_z_t=context_z_t,
-            embedding_z_t=embedding_z_t,
-        )
+        embedding_latent, embedding_mask = self.ddpm_sample(batch_size, lengths)
+        return embedding_latent, embedding_mask
 
 
 @register_module(name="baseline_diffusion_layer")
@@ -399,5 +380,46 @@ class BaselineDiffusionLayer(BaseDiffusion):
         loss = self.loss_fn(pred, target, reduction='mean')
         return loss
 
-    def sample(self, x):
-        raise NotImplementedError
+    def sample(self, batch_size: int, lengths: List[int]):
+        # latents, mask = self.diffusion_model.sample(batch_size, [seq_len]*batch_size)
+        latents, latent_mask = self.ddpm_sample(batch_size, lengths)
+        return latents, latent_mask
+
+    @torch.no_grad()
+    def ddpm_sample(
+        self,
+        batch_size: int,
+        lengths: List[int],
+    ):
+        device = next(self.encoder.parameters()).device
+        time_pairs = utils.get_sampling_timesteps(batch_size, self.config.sampling_timesteps, device)
+
+        latents_shape = (batch_size, self.config.num_encoder_latents, self.config.latent_dim)
+        latents = torch.randn(latents_shape, device=device)
+        latent_mask = [[True] * length + [False] * (self.config.num_encoder_latents - length) for length in lengths]
+        latent_mask = torch.tensor(latent_mask, dtype=torch.bool, device=device)
+        self_cond = None
+
+        for time, time_next in tqdm(time_pairs, total=self.config.sampling_timesteps):
+            diffusion_output = self.forward(
+                latent=latents,
+                context=None,
+                times=time,
+                attention_mask=latent_mask,
+                self_cond=self_cond,)
+            pred_x_start = diffusion_output.pred_start
+            pred_eps = diffusion_output.pred_noise
+
+            alpha = utils.time_to_alpha(time, latents.ndim)
+            alpha_next = utils.time_to_alpha(time_next, latents.ndim)
+            alpha_now = alpha / alpha_next
+
+            if time_next[0] <= 0:
+                latents = pred_x_start
+                continue
+
+            noise = torch.randn_like(latents)
+            latents = 1 / alpha_now.sqrt() * (latents - (1 - alpha_now) / (1 - alpha).sqrt() * pred_eps)
+            latents = latents + (torch.sqrt(1 - alpha_now) * noise)
+
+        return latents, latent_mask

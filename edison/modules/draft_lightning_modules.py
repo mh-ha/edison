@@ -3,6 +3,7 @@ from typing import Optional
 import torch
 from einops import einsum
 from tqdm import tqdm
+from transformers.modeling_outputs import BaseModelOutput
 
 from edison.configs.base import Config
 from edison.layers import get_module as get_layer_module
@@ -62,9 +63,12 @@ class EdisonAE(BaseEdisonAE):
             return encoder_outputs, embeddings
         return encoder_outputs
 
-    def decode(self, encoder_outputs):
-        ae_decoder_outputs = self.ae.decode(encoder_outputs)
-        output = self.lm(encoder_outputs=ae_decoder_outputs)
+    def decode(self, encoder_outputs, attention_mask=None, mode='generate'):
+        encoder_output = BaseModelOutput(last_hidden_state=self.ae.decode(encoder_outputs))
+        if mode == 'generate':
+            output = self.lm.generate(encoder_outputs=encoder_output, attention_mask=attention_mask)
+        else:
+            output = self.lm(encoder_outputs=encoder_output, attention_mask=attention_mask)
         return output
 
     def training_step(self, batch, batch_idx):
@@ -140,11 +144,12 @@ class EdisonDiffusion(BaseEdisonDiffusion):
         }
 
     @torch.no_grad()
-    def generate(self, num_samples, seq_len, class_id=None, seed=42, batch_size=8):
+    def generate(self, num_samples, seq_len, batch_size=8, seed=42):
         torch.manual_seed(seed)
         generated_texts = []
+
         for i in tqdm(range(0, num_samples, batch_size)):
-            latents, mask = self.diffusion_model.sample(batch_size, [seq_len]*batch_size, class_id=class_id)
+            latents, mask = self.diffusion_model.sample(batch_size, [seq_len]*batch_size)
             # decode latents to token_ids
             sample_ids = einsum(latents, self.autoencoder.lm_input_embeddings.weight, 'b l d, n d -> b l n')
             sample_ids = sample_ids.argmax(dim=-1)
@@ -199,14 +204,13 @@ class BaselineDiffusion(BaseEdisonDiffusion):
         }
 
     @torch.no_grad()
-    def generate(self, num_samples, seq_len, class_id=None, seed=42, batch_size=8):
+    def generate(self, num_samples, seq_len, batch_size=8, seed=42):
         torch.manual_seed(seed)
         generated_texts = []
+
         for i in tqdm(range(0, num_samples, batch_size)):
             latents, mask = self.diffusion_model.sample(batch_size, [seq_len]*batch_size)
-            # decode latents to token_ids
-            sample_ids = einsum(latents, self.autoencoder.lm_input_embeddings.weight, 'b l d, n d -> b l n')
-            sample_ids = sample_ids.argmax(dim=-1)
+            sample_ids = self.autoencoder.decode(latents, mode='generate')
             texts_list = [self.tokenizer.decode(g, skip_special_tokens=True, clean_up_tokenization_spaces=True) for g in sample_ids]
             texts_list = [text.strip() for text in texts_list if len(text.strip()) > 0]
             generated_texts.extend(texts_list)

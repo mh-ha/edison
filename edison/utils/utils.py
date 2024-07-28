@@ -140,6 +140,15 @@ def set_seeds(seed):
     torch.cuda.manual_seed(seed)
 
 
+def get_sampling_timesteps(batch, sampling_timesteps, device, invert=False):
+    times = torch.linspace(1., 0., sampling_timesteps + 1, device=device)
+    if invert:
+        times = times.flip(dims=(0,))
+    times = times.unsqueeze(0).repeat(batch, 1)
+    times = torch.stack((times[:, :-1], times[:, 1:]), dim=0)
+    return times.unbind(dim=-1)
+
+
 class RMSNorm(nn.Module):
     def __init__(
         self,

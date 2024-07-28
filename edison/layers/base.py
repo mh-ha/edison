@@ -1,5 +1,5 @@
 from abc import ABC, abstractmethod
-from typing import Optional, Union
+from typing import Optional, Union, List, Tuple
 
 from torch import nn, Tensor
 
@@ -50,7 +50,7 @@ class BaseDiffusion(nn.Module, ABC):
         raise NotImplementedError
 
     @abstractmethod
-    def sample(self, x) -> Tensor:
+    def sample(self, batch_size: int, lengths: List[int]) -> Tuple[Tensor, Tensor]:
         raise NotImplementedError
 
     def _build_time_mlp(

@@ -64,7 +64,7 @@ def train(config: Config):
     high-level function.
     """
     trainer = TrainFunction(config)
-    # model = trainer.train_AE()
-    model: BaseEdisonAE = get_module(module_name=config.ae_module_name)(config)
+    model = trainer.train_AE()
+    # model: BaseEdisonAE = get_module(module_name=config.ae_module_name)(config)
     model = trainer.train_diffusion(autoencoder=model)
     return model

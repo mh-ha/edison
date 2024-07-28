@@ -1,5 +1,5 @@
 from abc import ABC, abstractmethod
-from typing import Optional
+from typing import Optional, List
 
 from torch import Tensor
 from lightning import LightningModule
@@ -55,7 +55,13 @@ class BaseEdisonDiffusion(LightningModule, ABC):
         raise NotImplementedError
 
     @abstractmethod
-    def generate(self):
+    def generate(
+        self,
+        num_samples: int,
+        seq_len: int,
+        batch_size: int,
+        seed: int,
+    ) -> List[str]:
         raise NotImplementedError
 
     @abstractmethod

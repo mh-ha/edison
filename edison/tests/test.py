@@ -53,6 +53,23 @@ def test_lm_decoder():
     print("LM Decoding test passed")
 
 
+def test_sampling(test_method):
+    batch_size = 2
+    lengths = [64] * batch_size
+    sampled_output = test_method(batch_size, lengths)
+    print(sampled_output)
+    print("Sampling test passed")
+
+
+def test_generate(test_method):
+    num_samples = 4
+    batch_size = 2
+    seq_len = 64
+    generated_output = test_method(num_samples, seq_len, batch_size=batch_size, seed=42)
+    print(generated_output)
+    print("Generation test passed")
+
+
 def test_full_workflow():
     mock_workflow = MockWorkflow()
     input_sentence = "This is a test sentence."

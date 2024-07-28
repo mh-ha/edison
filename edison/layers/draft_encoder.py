@@ -224,6 +224,7 @@ class Encoder(BaseEncoder):
         # 여기서 position은 CPE(continuous position embedding)
         position_input = torch.arange(latent.shape[1], device=latent.device)
         position_input = repeat(position_input, 'n -> b n', b=latent.shape[0])
+
         # make buffer word position to zero
         position_input = (position_input+1) * attention_mask
         position = self.project_embedding_to_position(position_input)
