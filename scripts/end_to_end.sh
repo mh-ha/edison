@@ -1,7 +1,7 @@
 #!/bin/bash
 
 # Change directory to edison_storage/edison
-cd edison_storage/edison
+cd ~/edison_storage/edison
 
 # Create a conda environment from the conda.yaml file
 conda env create -f conda.yaml
