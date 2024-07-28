@@ -7,13 +7,13 @@ from transformers.modeling_outputs import BaseModelOutput
 from transformers import AutoTokenizer
 from tqdm import tqdm
 
-from edison.configs.config import LD4LGConfig, EdisonConfig
+from legacy.etc.config import LD4LGConfig, EdisonConfig
 from edison.layers.lm import get_BART
 # from edison.layers.edison_autoencoder import EdisonPerceiverAutoEncoder
 from edison.layers.ld4lg_diffusion import GaussianDiffusion
 # from edison.layers.edison_diffusion import EdisonGaussianDiffusion
-from edison.layers.draft_autoencoder import AutoEncoder
-from edison.layers.draft_diffusion import DiffusionLayer
+from edison.layers.autoencoder import AutoEncoder
+from edison.layers.diffusion import DiffusionLayer
 
 
 class LD4LGAE(L.LightningModule):

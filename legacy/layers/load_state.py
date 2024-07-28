@@ -2,7 +2,7 @@ import yaml
 import torch
 
 from ...edison.layers.lm import LM
-from ...edison.configs.config import Config
+from ..etc.config import Config
 
 def load_state(path:str):
     return torch.load(path)

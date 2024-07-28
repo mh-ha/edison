@@ -11,7 +11,7 @@ import lightning as L
 from einops import rearrange, reduce, repeat
 from tqdm.auto import tqdm
 
-from edison.configs.config import Config
+from legacy.etc.config import Config
 from edison.layers.positional_embedding import AbsolutePositionalEmbedding
 from edison.layers.ld4lg_diffusion_layer import Encoder
 

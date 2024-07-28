@@ -11,7 +11,7 @@ from tqdm import tqdm
 from edison.configs.base import Config
 from edison.layers import register_module
 from edison.layers.base import BaseDiffusion
-from edison.layers.draft_encoder import Encoder, BaselineEncoder
+from edison.layers.encoder import Encoder, BaselineEncoder
 from edison.layers.positional_embedding import AbsolutePositionalEmbedding
 from edison.schemas.model import DiffusionOutput
 import edison.utils.utils as utils
@@ -28,12 +28,12 @@ class DiffusionLayer(BaseDiffusion):
         # init
         self.config = config
         self.self_condition = config.self_condition
-        self.input_dim = config.lm_dim
-        self.internal_dim = config.tx_dim
-        self.output_dim = config.lm_dim
+        self.input_dim = config.dim_lm
+        self.internal_dim = config.internal_dim
+        self.output_dim = config.dim_lm
         self.encoder = Encoder(
             internal_dim=self.internal_dim,
-            depth=config.tx_depth,
+            depth=config.network_depth,
             num_heads=config.num_attn_heads,
             ff_mult=config.ff_mult,
             max_seq_len=config.max_seq_len,
@@ -43,7 +43,7 @@ class DiffusionLayer(BaseDiffusion):
 
         # layers
         self.pos_emb = None
-        self.context_input_proj = self._build_projection(config.latent_dim, self.internal_dim)
+        self.context_input_proj = self._build_projection(config.dim_ae, self.internal_dim)
         self.time_mlp = self._build_time_mlp(self.internal_dim, self.internal_dim * config.ff_mult)
         self.time_proj = self._build_time_projection(self.internal_dim * config.ff_mult, self.internal_dim)
         if self.self_condition:
@@ -154,7 +154,7 @@ class DiffusionLayer(BaseDiffusion):
 
         # self-conditioning
         self_cond = None
-        if self.self_condition and (random() < self.config.train_prob_self_cond):
+        if self.self_condition and (random() < self.config.train_self_cond_prob):
             # generate self condition using diffusion model
             with torch.no_grad():
                 model_output = self.forward(
@@ -189,12 +189,12 @@ class DiffusionLayer(BaseDiffusion):
         device = next(self.encoder.parameters()).device
         time_pairs = utils.get_sampling_timesteps(batch_size, self.config.sampling_timesteps, device)
 
-        context_shape = (batch_size, self.config.num_encoder_latents, self.config.latent_dim)
+        context_shape = (batch_size, self.config.num_encoder_latents, self.config.dim_ae)
         context_latent = torch.randn(context_shape, device=device)
         # context_mask = [[True] * length + [False] * (self.config.num_encoder_latents - length) for length in lengths]
         # context_mask = torch.tensor(context_mask, dtype=torch.bool, device=device)
 
-        embedding_shape = (batch_size, self.config.max_seq_len, self.config.tx_dim)
+        embedding_shape = (batch_size, self.config.max_seq_len, self.config.internal_dim)
         embedding_latent = torch.randn(embedding_shape, device=device)
         embedding_mask = [[True] * length + [False] * (self.config.max_seq_len - length) for length in lengths]
         embedding_mask = torch.tensor(embedding_mask, dtype=torch.bool, device=device)
@@ -245,19 +245,19 @@ class BaselineDiffusionLayer(BaseDiffusion):
         # init
         self.config = config
         self.self_condition = config.self_condition
-        self.input_dim = config.latent_dim
-        self.internal_dim = config.tx_dim
-        self.output_dim = config.latent_dim
+        self.input_dim = config.dim_ae
+        self.internal_dim = config.internal_dim
+        self.output_dim = config.dim_ae
 
         # layers
         self.encoder = BaselineEncoder(
             internal_dim=self.internal_dim,
-            depth=config.tx_depth,
+            depth=config.network_depth,
             num_heads=config.num_attn_heads,
             ff_mult=config.ff_mult,
             max_seq_len=config.num_encoder_latents,
             num_dense_connections=config.num_dense_connections,)
-        self.pos_emb = AbsolutePositionalEmbedding(config.tx_dim, config.num_encoder_latents)
+        self.pos_emb = AbsolutePositionalEmbedding(config.internal_dim, config.num_encoder_latents)
         self.time_mlp = self._build_time_mlp(self.internal_dim, self.internal_dim * config.ff_mult)
         self.time_proj = self._build_time_projection(self.internal_dim * config.ff_mult, self.internal_dim)
 
@@ -354,7 +354,7 @@ class BaselineDiffusionLayer(BaseDiffusion):
 
         # self-conditioning
         self_cond = None
-        if self.self_condition and (random() < self.config.train_prob_self_cond):
+        if self.self_condition and (random() < self.config.train_self_cond_prob):
             # generate self condition using diffusion model
             with torch.no_grad():
                 model_output = self.forward(
@@ -394,7 +394,7 @@ class BaselineDiffusionLayer(BaseDiffusion):
         device = next(self.encoder.parameters()).device
         time_pairs = utils.get_sampling_timesteps(batch_size, self.config.sampling_timesteps, device)
 
-        latents_shape = (batch_size, self.config.num_encoder_latents, self.config.latent_dim)
+        latents_shape = (batch_size, self.config.num_encoder_latents, self.config.dim_ae)
         latents = torch.randn(latents_shape, device=device)
         latent_mask = [[True] * length + [False] * (self.config.num_encoder_latents - length) for length in lengths]
         latent_mask = torch.tensor(latent_mask, dtype=torch.bool, device=device)

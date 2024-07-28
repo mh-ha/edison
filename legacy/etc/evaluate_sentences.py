@@ -2,7 +2,7 @@ import argparse
 
 import pandas as pd
 
-from edison.modules.lightning_data_module import get_dataset
+from legacy.modules.lightning_data_module import get_dataset
 from edison.metrics.evaluation import evaluate_model
 
 # init wandb

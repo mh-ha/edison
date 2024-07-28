@@ -87,11 +87,11 @@ class EdisonAE(BaseEdisonAE):
         encoder_outputs['last_hidden_state'] = ae_decoder_outputs
         output = self.lm(labels=targets, encoder_outputs=encoder_outputs)
         loss = output.loss
-        self.log('loss', loss, on_step=True, prog_bar=True)
+        self.log('loss_ae', loss, on_step=True, prog_bar=True)
         return loss
 
     def configure_optimizers(self):
-        optimizer = torch.optim.AdamW(self.ae.parameters(), lr=self.config.learning_rate)
+        optimizer = torch.optim.AdamW(self.ae.parameters(), lr=self.config.learning_rate_ae)
         scheduler = torch.optim.lr_scheduler.LinearLR(optimizer, start_factor=1, end_factor=0, total_iters=self.config.max_steps_ae)
         return {
             'optimizer': optimizer,
@@ -132,11 +132,11 @@ class EdisonDiffusion(BaseEdisonDiffusion):
         attention_mask = batch['attention_mask']
         context_latents, embedding_latents = self.autoencoder.encode(inputs, attention_mask, return_embeddings=True)
         loss = self(embedding_latents, context_latents, attention_mask)
-        self.log('loss', loss, on_step=True, prog_bar=True)
+        self.log('loss_diffusion', loss, on_step=True, prog_bar=True)
         return loss
 
     def configure_optimizers(self):
-        optimizer = torch.optim.AdamW(self.diffusion_model.parameters(), lr=self.config.learning_rate)
+        optimizer = torch.optim.AdamW(self.diffusion_model.parameters(), lr=self.config.learning_rate_diffusion)
         scheduler = torch.optim.lr_scheduler.LinearLR(optimizer, start_factor=1, end_factor=0, total_iters=self.config.max_steps_diffusion)
         return {
             'optimizer': optimizer,
@@ -192,11 +192,11 @@ class BaselineDiffusion(BaseEdisonDiffusion):
         latents = self.autoencoder.encode(inputs, attention_mask, return_embeddings=False)
         context_latents = None
         loss = self(latents, context_latents, attention_mask)
-        self.log('loss', loss, on_step=True, prog_bar=True)
+        self.log('loss_diffusion', loss, on_step=True, prog_bar=True)
         return loss
 
     def configure_optimizers(self):
-        optimizer = torch.optim.AdamW(self.diffusion_model.parameters(), lr=self.config.learning_rate)
+        optimizer = torch.optim.AdamW(self.diffusion_model.parameters(), lr=self.config.learning_rate_diffusion)
         scheduler = torch.optim.lr_scheduler.LinearLR(optimizer, start_factor=1, end_factor=0, total_iters=self.config.max_steps_diffusion)
         return {
             'optimizer': optimizer,

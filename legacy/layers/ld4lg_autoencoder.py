@@ -7,7 +7,7 @@ import torch.nn.functional as F
 import lightning as L
 from einops import rearrange, repeat
 
-from edison.configs.config import Config
+from legacy.etc.config import Config
 from edison.layers.positional_embedding import AbsolutePositionalEmbedding
 from edison.layers.lm import get_BART
 from edison.utils.utils import exists, divisible_by

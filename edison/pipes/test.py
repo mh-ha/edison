@@ -1,7 +1,7 @@
 import wandb
 
 from edison.pipes.generate import generate_from_model
-from edison.modules.lightning_data_module import get_dataset
+from edison.modules.lightning_data_modules import get_dataset
 from edison.metrics.evaluation import evaluate_model
 
 

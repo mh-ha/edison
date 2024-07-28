@@ -1,10 +1,10 @@
 import argparse
 
 from edison.pipes.generate import generate_from_model
-from edison.modules.draft_lightning_modules import (
+from edison.modules.lightning_modules import (
     EdisonDiffusion
 )
-from edison.modules.lightning_data_module import get_dataset
+from legacy.modules.lightning_data_module import get_dataset
 from edison.metrics.evaluation import evaluate_model
 
 # init wandb

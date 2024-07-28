@@ -9,7 +9,7 @@ import torch.nn.functional as F
 from einops import rearrange, repeat
 from tqdm.auto import tqdm
 
-from edison.configs.config import EdisonConfig
+from legacy.etc.config import EdisonConfig
 # from edison.layers.edison_diffusion_layer import Encoder
 from edison.layers.edison_diffusion_layer import EdisonEncoder
 from edison.utils.utils import time_to_alpha, cosine_schedule, right_pad_dims_to, init_zero_, default

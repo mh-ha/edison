@@ -10,7 +10,7 @@ from datasets import load_dataset
 from transformers import BatchEncoding, PreTrainedTokenizerBase
 from transformers.models.bart.modeling_bart import shift_tokens_right
 
-from edison.configs.config import Config, EdisonConfig
+from legacy.etc.config import Config, EdisonConfig
 
 
 def get_dataset(dataset_name, data_path=None):
