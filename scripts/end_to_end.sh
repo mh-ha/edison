@@ -11,4 +11,5 @@ conda activate edison
 python -m spacy download en_core_web_sm
 
 # Run the Python script with the specified arguments
-python run.py --run_name 'baseline'
+current_time=$(date +"%Y-%m-%d_%H-%M-%S")
+python run.py --run_name "baseline_$current_time"
