@@ -3,7 +3,7 @@ import warnings
 
 from legacy.etc.config import EdisonConfig, LD4LGConfig
 from legacy.etc.train import main as train_main
-from edison.pipes.test import evaluate_trained_model
+from edison.pipes.evaluate import evaluate_trained_model
 
 warnings.filterwarnings("ignore")
 

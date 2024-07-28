@@ -9,7 +9,7 @@ from edison.configs.base import Config
 def get_trainer(config: Config, logger=None, max_steps=250000):
     trainer = L.Trainer(
         # strategy=DDPStrategy(find_unused_parameters=True),
-        # logger=logger,
+        logger=logger,
         max_steps=max_steps,
         gradient_clip_val=config.gradient_clip_val,
         gradient_clip_algorithm=config.gradient_clip_algorithm,

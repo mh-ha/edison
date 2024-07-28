@@ -18,10 +18,9 @@ class TrainFunction:
     """
     abstract level.
     """
-    def __init__(self, config: Config, **kwargs):
+    def __init__(self, config: Config, wandb_logger: Optional[WandbLogger], **kwargs):
         self.config = config
-        self.wandb_logger = WandbLogger(project=self.config.project_name)
-        # self.trainer = get_trainer(config, logger=self.wandb_logger)
+        self.wandb_logger = wandb_logger
         self.dataset = get_dataset(config.dataset_name)
 
     def train_AE(self, **kwargs):
@@ -59,12 +58,12 @@ class TrainFunction:
         return diffusion
 
 
-def train(config: Config):
+def train(config: Config, wandb_logger: Optional[WandbLogger] = None):
     """
     high-level function.
     """
-    trainer = TrainFunction(config)
-    # model = trainer.train_AE()
-    model: BaseEdisonAE = get_module(module_name=config.ae_module_name)(config)
+    trainer = TrainFunction(config, wandb_logger=wandb_logger)
+    model = trainer.train_AE()
+    # model: BaseEdisonAE = get_module(module_name=config.ae_module_name)(config)
     model = trainer.train_diffusion(autoencoder=model)
     return model
