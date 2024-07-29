@@ -24,7 +24,7 @@ def main():
         log_model=True,)
     print(config)
     model = train(config, wandb_logger=wandb_logger)
-    evaluate_trained_model(model, args.saved_file_name, wandb_logger=wandb_logger)
+    evaluate_trained_model(model, wandb_logger=wandb_logger)
 
 
 if __name__ == '__main__':
