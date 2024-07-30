@@ -14,9 +14,13 @@ def main():
     # Parse arguments
     parser = argparse.ArgumentParser()
     parser.add_argument('--run_name', type=str, default=None, help='wandb run name', required=False)
+    parser.add_argument('--batch_size', type=int, default=None, help='batch size', required=False)
     args = parser.parse_args()
 
-    config = Config()
+    if args.batch_size:
+        config = Config(train_batch_size=args.batch_size)
+    else:
+        config = Config()
     wandb_logger = WandbLogger(
         project=config.project_name,
         config=config.__dict__,
