@@ -23,8 +23,11 @@ class Config:
     max_seq_len: int = 64
 
     # Optimizer
-    learning_rate_ae: float = 1e-4
-    learning_rate_diffusion: float = 2e-4
+    learning_rate_peak_ae: float = 1e-4
+    learning_rate_peak_diffusion: float = 2e-4
+    learning_rate_warmup_start: float = 0
+    learning_rate_final: float = 0
+    warmup_steps: int = 1000
 
     ############################
 
