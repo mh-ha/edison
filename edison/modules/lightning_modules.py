@@ -88,6 +88,7 @@ class EdisonAE(BaseEdisonAE):
         output = self.lm(labels=targets, encoder_outputs=encoder_outputs)
         loss = output.loss
         self.log('loss_ae', loss, on_step=True, prog_bar=True)
+        self.log('lr', self.trainer.optimizers[0].param_groups[0]['lr'], on_step=True, prog_bar=True)
         return loss
 
     def configure_optimizers(self):
@@ -147,6 +148,7 @@ class EdisonDiffusion(BaseEdisonDiffusion):
         context_latents, embedding_latents = self.autoencoder.encode(inputs, attention_mask, return_embeddings=True)
         loss = self(embedding_latents, context_latents, attention_mask)
         self.log('loss_diffusion', loss, on_step=True, prog_bar=True)
+        self.log('lr', self.trainer.optimizers[0].param_groups[0]['lr'], on_step=True, prog_bar=True)
         return loss
 
     def configure_optimizers(self):
@@ -221,6 +223,7 @@ class BaselineDiffusion(BaseEdisonDiffusion):
         context_latents = None
         loss = self(latents, context_latents, attention_mask)
         self.log('loss_diffusion', loss, on_step=True, prog_bar=True)
+        self.log('lr', self.trainer.optimizers[0].param_groups[0]['lr'], on_step=True, prog_bar=True)
         return loss
 
     def configure_optimizers(self):
