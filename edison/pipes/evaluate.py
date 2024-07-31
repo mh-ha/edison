@@ -12,6 +12,8 @@ def evaluate_trained_model(
     saved_file_name='generated_samples.csv',
     wandb_logger: Optional[WandbLogger] = None
 ):
+    model.eval()
+    model.cuda()
     dataset = get_dataset('roc')
     reference_data = dataset['valid']['text'] + dataset['test']['text']
     generated_data = generate_from_model(
