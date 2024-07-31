@@ -2,13 +2,14 @@ from typing import Optional
 
 from lightning.pytorch.loggers import WandbLogger
 
+from edison.modules.base import BaseEdisonDiffusion
 from edison.pipes.generate import generate_from_model
 from edison.modules.lightning_data_modules import get_dataset
 from edison.metrics.evaluation import evaluate_model
 
 
 def evaluate_trained_model(
-    model,
+    model: BaseEdisonDiffusion,
     saved_file_name='generated_samples.csv',
     wandb_logger: Optional[WandbLogger] = None
 ):
