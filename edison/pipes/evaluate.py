@@ -31,6 +31,6 @@ def evaluate_trained_model(
         ref = reference_data[i*1000:(i+1)*1000]
         result = evaluate_model(gen, ref)
         if wandb_logger:
-            wandb_logger.log_table(key=f"text_generated_{i}", columns=["text_gen"], data=[gen])
-            wandb_logger.log_table(key=f"text_reference_{i}", columns=["text_ref"], data=[ref])
             wandb_logger.log_metrics(result, step=i)
+            wandb_logger.log_table(key=f"text_generated_{i}", data=[gen])
+            wandb_logger.log_table(key=f"text_reference_{i}", data=[ref])
