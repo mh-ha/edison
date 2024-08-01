@@ -33,6 +33,7 @@ class Config:
 
     # Edison AE
     ae_module_name: str = 'edison_ae'
+    freeze_lm: bool = True
     dim_lm: int = 768
     dim_ae: int = 64
     num_layers: int = 3

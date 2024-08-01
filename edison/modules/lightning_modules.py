@@ -23,8 +23,9 @@ class EdisonAE(BaseEdisonAE):
         self.save_hyperparameters('config')
 
         self.lm, self.tokenizer = get_BART()
-        for param in self.lm.parameters():
-            param.requires_grad = False
+        if self.config.freeze_lm:
+            for param in self.lm.parameters():
+                param.requires_grad = False
         self.lm_input_embeddings = self.lm.get_input_embeddings()
 
         self.ae = get_layer_module(module_name="autoencoder")(
@@ -92,22 +93,25 @@ class EdisonAE(BaseEdisonAE):
         return loss
 
     def configure_optimizers(self):
-        optimizer = torch.optim.AdamW(self.ae.parameters(), lr=self.config.learning_rate_peak_ae)
-        # scheduler = torch.optim.lr_scheduler.LinearLR(optimizer, start_factor=1, end_factor=0, total_iters=self.config.max_steps_ae)
+        if self.config.freeze_lm:
+            optimizer = torch.optim.AdamW(self.ae.parameters(), lr=self.config.learning_rate_peak_ae)
+        else:
+            optimizer = torch.optim.AdamW(self.parameters(), lr=self.config.learning_rate_peak_ae)
+        scheduler = torch.optim.lr_scheduler.LinearLR(optimizer, start_factor=1, end_factor=0, total_iters=self.config.max_steps_ae)
 
-        def lr_lambda(step):
-            start_lr = self.config.learning_rate_warmup_start
-            peak_lr = self.config.learning_rate_peak_ae
-            final_lr = self.config.learning_rate_final
-            warmup_steps = self.config.warmup_steps
-            total_steps = self.config.max_steps_ae
-            if step < warmup_steps:
-                return ((peak_lr - start_lr) / warmup_steps) * step + start_lr
-            elif step > warmup_steps and step < total_steps:
-                return ((peak_lr - final_lr) / (total_steps - warmup_steps)) * (total_steps - step) + final_lr
-            else:
-                return 0.
-        scheduler = torch.optim.lr_scheduler.LambdaLR(optimizer, lr_lambda=lr_lambda)
+        # def lr_lambda(step):
+        #     start_lr = self.config.learning_rate_warmup_start
+        #     peak_lr = self.config.learning_rate_peak_ae
+        #     final_lr = self.config.learning_rate_final
+        #     warmup_steps = self.config.warmup_steps
+        #     total_steps = self.config.max_steps_ae
+        #     if step < warmup_steps:
+        #         return ((peak_lr - start_lr) / warmup_steps) * step + start_lr
+        #     elif step > warmup_steps and step < total_steps:
+        #         return ((peak_lr - final_lr) / (total_steps - warmup_steps)) * (total_steps - step) + final_lr
+        #     else:
+        #         return 0.
+        # scheduler = torch.optim.lr_scheduler.LambdaLR(optimizer, lr_lambda=lr_lambda)
         return {
             'optimizer': optimizer,
             'lr_scheduler': scheduler,
@@ -153,21 +157,21 @@ class EdisonDiffusion(BaseEdisonDiffusion):
 
     def configure_optimizers(self):
         optimizer = torch.optim.AdamW(self.diffusion_model.parameters(), lr=self.config.learning_rate_peak_diffusion)
-        # scheduler = torch.optim.lr_scheduler.LinearLR(optimizer, start_factor=1, end_factor=0, total_iters=self.config.max_steps_diffusion)
+        scheduler = torch.optim.lr_scheduler.LinearLR(optimizer, start_factor=1, end_factor=0, total_iters=self.config.max_steps_diffusion)
 
-        def lr_lambda(step):
-            start_lr = self.config.learning_rate_warmup_start
-            peak_lr = self.config.learning_rate_peak_diffusion
-            final_lr = self.config.learning_rate_final
-            warmup_steps = self.config.warmup_steps
-            total_steps = self.config.max_steps_diffusion
-            if step < warmup_steps:
-                return ((peak_lr - start_lr) / warmup_steps) * step + start_lr
-            elif step > warmup_steps and step < total_steps:
-                return ((peak_lr - final_lr) / (total_steps - warmup_steps)) * (total_steps - step) + final_lr
-            else:
-                return 0.
-        scheduler = torch.optim.lr_scheduler.LambdaLR(optimizer, lr_lambda=lr_lambda)
+        # def lr_lambda(step):
+        #     start_lr = self.config.learning_rate_warmup_start
+        #     peak_lr = self.config.learning_rate_peak_diffusion
+        #     final_lr = self.config.learning_rate_final
+        #     warmup_steps = self.config.warmup_steps
+        #     total_steps = self.config.max_steps_diffusion
+        #     if step < warmup_steps:
+        #         return ((peak_lr - start_lr) / warmup_steps) * step + start_lr
+        #     elif step > warmup_steps and step < total_steps:
+        #         return ((peak_lr - final_lr) / (total_steps - warmup_steps)) * (total_steps - step) + final_lr
+        #     else:
+        #         return 0.
+        # scheduler = torch.optim.lr_scheduler.LambdaLR(optimizer, lr_lambda=lr_lambda)
         return {
             'optimizer': optimizer,
             'lr_scheduler': scheduler,
@@ -228,21 +232,21 @@ class BaselineDiffusion(BaseEdisonDiffusion):
 
     def configure_optimizers(self):
         optimizer = torch.optim.AdamW(self.diffusion_model.parameters(), lr=self.config.learning_rate_peak_diffusion)
-        # scheduler = torch.optim.lr_scheduler.LinearLR(optimizer, start_factor=1, end_factor=0, total_iters=self.config.max_steps_diffusion)
+        scheduler = torch.optim.lr_scheduler.LinearLR(optimizer, start_factor=1, end_factor=0, total_iters=self.config.max_steps_diffusion)
 
-        def lr_lambda(step):
-            start_lr = self.config.learning_rate_warmup_start
-            peak_lr = self.config.learning_rate_peak_diffusion
-            final_lr = self.config.learning_rate_final
-            warmup_steps = self.config.warmup_steps
-            total_steps = self.config.max_steps_diffusion
-            if step < warmup_steps:
-                return ((peak_lr - start_lr) / warmup_steps) * step + start_lr
-            elif step > warmup_steps and step < total_steps:
-                return ((peak_lr - final_lr) / (total_steps - warmup_steps)) * (total_steps - step) + final_lr
-            else:
-                return 0.
-        scheduler = torch.optim.lr_scheduler.LambdaLR(optimizer, lr_lambda=lr_lambda)
+        # def lr_lambda(step):
+        #     start_lr = self.config.learning_rate_warmup_start
+        #     peak_lr = self.config.learning_rate_peak_diffusion
+        #     final_lr = self.config.learning_rate_final
+        #     warmup_steps = self.config.warmup_steps
+        #     total_steps = self.config.max_steps_diffusion
+        #     if step < warmup_steps:
+        #         return ((peak_lr - start_lr) / warmup_steps) * step + start_lr
+        #     elif step > warmup_steps and step < total_steps:
+        #         return ((peak_lr - final_lr) / (total_steps - warmup_steps)) * (total_steps - step) + final_lr
+        #     else:
+        #         return 0.
+        # scheduler = torch.optim.lr_scheduler.LambdaLR(optimizer, lr_lambda=lr_lambda)
         return {
             'optimizer': optimizer,
             'lr_scheduler': scheduler,
