@@ -6,6 +6,7 @@ from tqdm import tqdm
 from transformers.modeling_outputs import BaseModelOutput
 
 from edison.configs.base import Config
+from edison.constants.generation import GENERATION_KWARGS
 from edison.layers import get_module as get_layer_module
 from edison.layers.base import BaseDiffusion
 from edison.layers.lm import get_BART
@@ -67,7 +68,7 @@ class EdisonAE(BaseEdisonAE):
     def decode(self, encoder_outputs, attention_mask=None, mode='generate'):
         encoder_output = BaseModelOutput(last_hidden_state=self.ae.decode(encoder_outputs))
         if mode == 'generate':
-            output = self.lm.generate(encoder_outputs=encoder_output, attention_mask=attention_mask)
+            output = self.lm.generate(encoder_outputs=encoder_output, attention_mask=attention_mask, **GENERATION_KWARGS)
         else:
             output = self.lm(encoder_outputs=encoder_output, attention_mask=attention_mask)
         return output

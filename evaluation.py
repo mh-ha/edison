@@ -29,7 +29,7 @@ def main():
         log_model=True,)
     print(config)
     model: BaseEdisonDiffusion = get_module(module_name=config.diffusion_module_name).load_from_checkpoint(
-        checkpoint_path="experiment_edison/5f7yiqy3/checkpoints/epoch=688-step=250000.ckpt",
+        checkpoint_path="experiment_edison/w1ratceh/checkpoints/epoch=688-step=250000.ckpt",
         map_location='cuda',
         config=config,
         autoencoder=None
