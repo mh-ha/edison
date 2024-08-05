@@ -121,6 +121,7 @@ class EdisonPerceiverAttention(nn.Module):
         attn = einsum('b h i d, b h j d  -> b h i j', self.query_norm(q) * self.scale, self.key_norm(k))
         if exists(attention_mask):
             max_neg_value = -torch.finfo(attn.dtype).max
+            attention_mask = F.pad(attention_mask, (0, latent.shape[-2]), value=True)  # differ from original perceiver
             attention_mask = rearrange(attention_mask, 'b j -> b 1 1 j')
             attn = attn.masked_fill(~attention_mask, max_neg_value)
         attn = attn.softmax(dim=-1, dtype=attn.dtype)
