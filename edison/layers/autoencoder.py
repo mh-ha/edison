@@ -92,6 +92,7 @@ class EdisonPerceiverAttention(nn.Module):
         self.key_norm = RMSNorm(dim_head) if qk_norm else nn.Identity()
         self.to_q = nn.Linear(dim_latent, self.inner_dim, bias=False)
         self.to_kv = nn.Linear(dim_input, self.inner_dim * 2, bias=False)
+        self.latent_to_kv = nn.Linear(dim_latent, self.inner_dim * 2, bias=False)
         self.to_out = nn.Linear(self.inner_dim, dim_latent)
 
     def forward(
@@ -107,7 +108,10 @@ class EdisonPerceiverAttention(nn.Module):
 
         # get q, k, v
         q = self.to_q(latent)
-        kv_input = self.to_kv(x)
+
+        # kv_input = self.to_kv(x)
+        kv_input = torch.cat([self.to_kv(x), self.latent_to_kv(latent)], dim=1)  # differ from original perceiver
+
         k, v = rearrange(kv_input, 'b n (split d) -> split b n d', split=2)
         q = rearrange(q, 'b n (h d) -> b h n d', h=h)
         k = rearrange(k, 'b n (h d) -> b h n d', h=h)
