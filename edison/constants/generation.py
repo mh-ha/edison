@@ -1,5 +1,6 @@
 GENERATION_KWARGS = {
-    'max_length': 64,
+    # 'max_length': 64,
+    'max_length': 128,
     'min_length': 5,
     'do_sample': False,
     'num_beams': 4,
