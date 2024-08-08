@@ -102,7 +102,7 @@ class EdisonAE(BaseEdisonAE):
             optimizer,
             start_factor=1,
             end_factor=0,
-            total_iters=self.config.max_steps_ae,)
+            total_iters=self.config.max_steps_ae//(self.config.train_batch_size*8))
 
         # def lr_lambda(step):
         #     start_lr = self.config.learning_rate_warmup_start
@@ -164,7 +164,7 @@ class EdisonDiffusion(BaseEdisonDiffusion):
         optimizer = torch.optim.AdamW(self.diffusion_model.parameters(), lr=self.config.learning_rate_peak_diffusion)
         scheduler = torch.optim.lr_scheduler.LinearLR(
             optimizer, start_factor=1, end_factor=0,
-            total_iters=self.config.max_steps_ae)
+            total_iters=self.config.max_steps_diffusion//(self.config.train_batch_size*8))
 
         # def lr_lambda(step):
         #     start_lr = self.config.learning_rate_warmup_start
@@ -241,7 +241,7 @@ class BaselineDiffusion(BaseEdisonDiffusion):
         optimizer = torch.optim.AdamW(self.diffusion_model.parameters(), lr=self.config.learning_rate_peak_diffusion)
         scheduler = torch.optim.lr_scheduler.LinearLR(
             optimizer, start_factor=1, end_factor=0,
-            total_iters=self.config.max_steps_ae,)
+            total_iters=self.config.max_steps_diffusion//(self.config.train_batch_size*8),)
 
         # def lr_lambda(step):
         #     start_lr = self.config.learning_rate_warmup_start
