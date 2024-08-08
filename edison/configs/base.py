@@ -6,7 +6,8 @@ class Config:
     ############################
 
     # Trainer
-    strategy: str = 'ddp'
+    # strategy: str = 'ddp'
+    strategy: str = ''
     gradient_clip_val: float = 1.0
     gradient_clip_algorithm: str = 'norm'
     gradient_accumulation_steps: int = 1

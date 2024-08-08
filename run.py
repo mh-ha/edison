@@ -1,3 +1,4 @@
+import os
 import argparse
 import warnings
 
@@ -7,6 +8,7 @@ from edison.configs.base import Config
 from edison.pipes.train import train
 from edison.pipes.evaluate import evaluate_trained_model
 
+os.environ['CURL_CA_BUNDLE'] = ''
 warnings.filterwarnings("ignore")
 
 

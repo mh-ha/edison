@@ -90,7 +90,7 @@ class EdisonAE(BaseEdisonAE):
         output = self.lm(labels=targets, encoder_outputs=encoder_outputs)
         loss = output.loss
         self.log('loss_ae', loss, on_step=True, prog_bar=True)
-        self.log('lr', self.trainer.optimizers[0].param_groups[0]['lr'], on_step=True, prog_bar=True)
+        self.log('lr_ae', self.trainer.optimizers[0].param_groups[0]['lr'], on_step=True, prog_bar=True)
         return loss
 
     def configure_optimizers(self):
@@ -102,7 +102,7 @@ class EdisonAE(BaseEdisonAE):
             optimizer,
             start_factor=1,
             end_factor=0,
-            total_iters=self.config.max_steps_ae//self.config.train_batch_size,)
+            total_iters=self.config.max_steps_ae,)
 
         # def lr_lambda(step):
         #     start_lr = self.config.learning_rate_warmup_start
@@ -157,13 +157,14 @@ class EdisonDiffusion(BaseEdisonDiffusion):
         context_latents, embedding_latents = self.autoencoder.encode(inputs, attention_mask, return_embeddings=True)
         loss = self(embedding_latents, context_latents, attention_mask)
         self.log('loss_diffusion', loss, on_step=True, prog_bar=True)
-        self.log('lr', self.trainer.optimizers[0].param_groups[0]['lr'], on_step=True, prog_bar=True)
+        self.log('lr_diffusion', self.trainer.optimizers[0].param_groups[0]['lr'], on_step=True, prog_bar=True)
         return loss
 
     def configure_optimizers(self):
         optimizer = torch.optim.AdamW(self.diffusion_model.parameters(), lr=self.config.learning_rate_peak_diffusion)
         scheduler = torch.optim.lr_scheduler.LinearLR(
-            optimizer, start_factor=1, end_factor=0, total_iters=self.config.max_steps_diffusion//self.config.train_batch_size)
+            optimizer, start_factor=1, end_factor=0,
+            total_iters=self.config.max_steps_ae)
 
         # def lr_lambda(step):
         #     start_lr = self.config.learning_rate_warmup_start
@@ -233,13 +234,14 @@ class BaselineDiffusion(BaseEdisonDiffusion):
         context_latents = None
         loss = self(latents, context_latents, attention_mask)
         self.log('loss_diffusion', loss, on_step=True, prog_bar=True)
-        self.log('lr', self.trainer.optimizers[0].param_groups[0]['lr'], on_step=True, prog_bar=True)
+        self.log('lr_diffusion', self.trainer.optimizers[0].param_groups[0]['lr'], on_step=True, prog_bar=True)
         return loss
 
     def configure_optimizers(self):
         optimizer = torch.optim.AdamW(self.diffusion_model.parameters(), lr=self.config.learning_rate_peak_diffusion)
         scheduler = torch.optim.lr_scheduler.LinearLR(
-            optimizer, start_factor=1, end_factor=0, total_iters=self.config.max_steps_diffusion//self.config.train_batch_size)
+            optimizer, start_factor=1, end_factor=0,
+            total_iters=self.config.max_steps_ae,)
 
         # def lr_lambda(step):
         #     start_lr = self.config.learning_rate_warmup_start

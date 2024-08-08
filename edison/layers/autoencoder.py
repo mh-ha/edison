@@ -17,7 +17,7 @@ class FeedForward(nn.Module):
         self,
         dim: int,
         mult: int = 4,
-        dropout: float = 0.,
+        dropout: float = 0.1,
     ) -> None:
         super().__init__()
         hidden_dim = int(dim * mult)
