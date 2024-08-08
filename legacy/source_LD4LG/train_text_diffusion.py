@@ -6,6 +6,11 @@ import os
 import numpy as np
 import torch
 
+import os
+import warnings
+os.environ['CURL_CA_BUNDLE'] = ''
+warnings.filterwarnings("ignore")
+
 import CONSTANTS
 from diffusion.text_denoising_diffusion import GaussianDiffusion, Trainer
 from model.diffusion_transformer import DiffusionTransformer
@@ -50,7 +55,8 @@ def main(args):
         seq2seq=(args.dataset_name in {'xsum', 'qqp', 'qg', 'wmt14-de-en', 'wmt14-en-de'}),
         seq2seq_context_dim=lm_dim, 
         num_dense_connections=args.num_dense_connections,
-    ).cuda()
+    # ).cuda()
+    )
 
     args.trainable_params = sum(p.numel() for p in model.parameters() if p.requires_grad)
 
@@ -66,7 +72,9 @@ def main(args):
         train_prob_self_cond = args.train_prob_self_cond,
         seq2seq_unconditional_prob = args.seq2seq_unconditional_prob,
         scale = args.scale,
-    ).cuda()
+    # ).cuda()
+    )
+    print(diffusion)
 
     trainer = Trainer(
         args=args,

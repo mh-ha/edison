@@ -21,6 +21,7 @@ class Config:
     max_steps_diffusion: int = 250000
     train_batch_size: int = 32
     max_seq_len: int = 64
+    dropout: float = 0.1
 
     # Optimizer
     learning_rate_peak_ae: float = 1e-4

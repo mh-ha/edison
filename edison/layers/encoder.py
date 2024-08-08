@@ -77,7 +77,8 @@ class Attention(nn.Module):
         self,
         dim,
         cross_dim=None,
-        num_heads=12
+        num_heads=12,
+        dropout=0.1,
     ):
         super().__init__()
         self.dim = dim
@@ -89,7 +90,7 @@ class Attention(nn.Module):
         self.words_to_q = nn.Linear(self.dim, self.head_dim*self.num_heads, bias=False)
         self.words_to_k = nn.Linear(self.dim if cross_dim is None else cross_dim, self.head_dim*self.num_heads, bias=False)
         self.words_to_v = nn.Linear(self.dim if cross_dim is None else cross_dim, self.head_dim*self.num_heads, bias=False)
-
+        self.dropout = nn.Dropout(dropout)
         self.to_out = nn.Linear(self.head_dim*self.num_heads, self.dim)
 
     def forward(self, words, rpe_words=None, cross_kv=None, rpe_cross=None):
@@ -105,25 +106,28 @@ class Attention(nn.Module):
         v = rearrange(self.words_to_v(words_kv), 'b n (h d) -> b h n d', h=h)
         score = einsum('b h i d, b h j d -> b h i j', q, k) * self.scale
         attn = score.softmax(dim=-1)
+        attn = self.dropout(attn)
         out = einsum('b h i j, b h j d -> b h i d', attn, v)
         out = rearrange(out, 'b h n d -> b n (h d)')
         # print(f"[Attention.forward.exit] out: {out.shape}")
         return self.to_out(out)
 
 
-class FeedForward(nn.Module):
-    def __init__(self, dim, ff_mult=4, dropout=0.):
+class FeedForwardWithGLU(nn.Module):
+    def __init__(self, dim, ff_mult=4, dropout=0.1):
         super().__init__()
         inner_dim = int(dim * ff_mult)
+        self.glu_activation = nn.GELU()
+        self.glu_linear = nn.Linear(dim, inner_dim*2)
         self.ff = nn.Sequential(
-            nn.Linear(dim, inner_dim),
-            nn.GELU(),
             nn.Dropout(dropout),
             nn.Linear(inner_dim, dim),
-            nn.Dropout(dropout)
+            # nn.Dropout(dropout)
         )
 
     def forward(self, x):
+        x, gate = self.glu_linear(x).chunk(2, dim=-1)
+        x = x * self.glu_activation(gate)
         return self.ff(x)
 
 
@@ -163,7 +167,7 @@ class Encoder(BaseEncoder):
                     XTAttention(internal_dim, num_heads=num_heads),
                     GRUGating(internal_dim),
                     nn.LayerNorm(internal_dim),
-                    FeedForward(internal_dim, ff_mult),
+                    FeedForwardWithGLU(internal_dim, ff_mult),
                     TimeConditionedResidual(internal_dim*ff_mult, internal_dim),
                 ])
             )
@@ -175,7 +179,7 @@ class Encoder(BaseEncoder):
             XTAttention(internal_dim, num_heads=num_heads),
             GRUGating(internal_dim),
             nn.LayerNorm(internal_dim),
-            FeedForward(internal_dim, ff_mult),
+            FeedForwardWithGLU(internal_dim, ff_mult),
             TimeConditionedResidual(internal_dim*ff_mult, internal_dim),
         ])
 
@@ -191,7 +195,7 @@ class Encoder(BaseEncoder):
                     Attention(internal_dim, num_heads=num_heads),
                     GRUGating(internal_dim),
                     nn.LayerNorm(internal_dim),
-                    FeedForward(internal_dim, ff_mult),
+                    FeedForwardWithGLU(internal_dim, ff_mult),
                     TimeConditionedResidual(internal_dim*ff_mult, internal_dim),
                 ])
             )
@@ -354,12 +358,14 @@ class BaselineEncoder(BaseEncoder):
                     Attention(internal_dim, num_heads=num_heads),
                     GRUGating(internal_dim),
                     nn.LayerNorm(internal_dim),
-                    FeedForward(internal_dim, ff_mult),
+                    FeedForwardWithGLU(internal_dim, ff_mult),
                     TimeConditionedResidual(internal_dim*ff_mult, internal_dim),
                 ])
             )
 
-        self.proj_dense_connection = nn.Linear(internal_dim*2, internal_dim)
+        self.proj_dense_connection = nn.ModuleList(
+            [nn.Linear(internal_dim*2, internal_dim) for _ in range(num_dense_connections)]
+        )
 
     def forward(
         self,
@@ -398,7 +404,8 @@ class BaselineEncoder(BaseEncoder):
             hidden_states.append(words)
             return words, hidden_states
         elif idx >= (len(self.layers) - self.num_dense_connections):
-            words = self.proj_dense_connection(torch.cat([words, hidden_states.pop(-1)], dim=-1))
+            proj_index = idx - (len(self.layers) - self.num_dense_connections)
+            words = self.proj_dense_connection[proj_index](torch.cat([words, hidden_states.pop(-1)], dim=-1))
             return words, hidden_states
         else:
             return words, hidden_states

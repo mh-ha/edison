@@ -257,7 +257,7 @@ class BaselineDiffusionLayer(BaseDiffusion):
             ff_mult=config.ff_mult,
             max_seq_len=config.num_encoder_latents,
             num_dense_connections=config.num_dense_connections,)
-        self.pos_emb = AbsolutePositionalEmbedding(config.internal_dim, config.num_encoder_latents)
+        self.pos_emb = AbsolutePositionalEmbedding(config.internal_dim, config.max_seq_len)
         self.time_mlp = self._build_time_mlp(self.internal_dim, self.internal_dim * config.ff_mult)
         self.time_proj = self._build_time_projection(self.internal_dim * config.ff_mult, self.internal_dim)
 
