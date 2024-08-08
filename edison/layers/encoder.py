@@ -36,7 +36,6 @@ class XTAttention(nn.Module):
 
         self.to_out = nn.Linear(self.head_dim*self.num_heads, self.dim)
 
-    # option 1
     def forward(self, words, position_words, conscious_words, cross_kv=None, position_cross=None, conscious_cross=None):
         # print(f"[XTAttention.forward.entry] words: {words.shape}, context: {cross_kv.shape}")
         h = self.num_heads

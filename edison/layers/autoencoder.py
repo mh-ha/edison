@@ -66,7 +66,7 @@ class Attention(nn.Module):
         x = self.norm(x)
         qkv = (self.to_q(x), self.to_k(x), self.to_v(x))
         q, k, v = map(lambda t: rearrange(t, 'b n (h d) -> b h n d', h=h), qkv)
-        sim = einsum('b h i d, b h j d -> b h i j', self.query_norm(q) * self.scale, self.key_norm(k))
+        sim = einsum('b h i d, b h j d -> b h i j', self.query_norm(q), self.key_norm(k)) * self.scale
         attn = sim.softmax(dim=-1)
         out = einsum('b h i j, b h j d -> b h i d', attn, v)
         out = rearrange(out, 'b h n d -> b n (h d)')
@@ -118,7 +118,7 @@ class EdisonPerceiverAttention(nn.Module):
         v = rearrange(v, 'b n (h d) -> b h n d', h=h)
 
         # attention
-        attn = einsum('b h i d, b h j d  -> b h i j', self.query_norm(q) * self.scale, self.key_norm(k))
+        attn = einsum('b h i d, b h j d  -> b h i j', self.query_norm(q), self.key_norm(k)) * self.scale
         if exists(attention_mask):
             max_neg_value = -torch.finfo(attn.dtype).max
             attention_mask = F.pad(attention_mask, (0, latent.shape[-2]), value=True)  # differ from original perceiver
