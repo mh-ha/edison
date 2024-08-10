@@ -1,6 +1,6 @@
 
 import os
-from typing import Optional, Dict
+from typing import Optional
 
 from lightning.pytorch.loggers import WandbLogger
 
@@ -18,10 +18,9 @@ class TrainFunction:
     """
     abstract level.
     """
-    def __init__(self, config: Config, wandb_logger: Dict[str, Optional[WandbLogger]], **kwargs):
+    def __init__(self, config: Config, wandb_logger: Optional[WandbLogger], **kwargs):
         self.config = config
-        self.wandb_logger_ae = wandb_logger.get('ae')
-        self.wandb_logger_diffusion = wandb_logger.get('diffusion')
+        self.wandb_logger = wandb_logger
         self.dataset = get_dataset(config.dataset_name)
 
     def train_AE(self, **kwargs):
@@ -37,7 +36,7 @@ class TrainFunction:
             mode='ae',)
 
         # train
-        self.trainer = get_trainer(self.config, logger=self.wandb_logger_ae, max_steps=self.config.max_steps_ae)
+        self.trainer = get_trainer(self.config, logger=self.wandb_logger, max_steps=self.config.max_steps_ae)
         self.trainer.fit(model, train_dataloaders=self.dataloader)
         return model
 
@@ -54,12 +53,12 @@ class TrainFunction:
             mode='diffusion',)
 
         # train
-        self.trainer = get_trainer(self.config, logger=self.wandb_logger_diffusion, max_steps=self.config.max_steps_diffusion)
+        self.trainer = get_trainer(self.config, logger=self.wandb_logger, max_steps=self.config.max_steps_diffusion)
         self.trainer.fit(diffusion, train_dataloaders=self.dataloader)
         return diffusion
 
 
-def train(config: Config, wandb_logger: Dict[str, Optional[WandbLogger]] = None):
+def train(config: Config, wandb_logger: Optional[WandbLogger] = None):
     """
     high-level function.
     """

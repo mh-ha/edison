@@ -23,25 +23,11 @@ def main():
         config = Config(train_batch_size=args.batch_size)
     else:
         config = Config()
-    wandb_logger_ae = WandbLogger(
+    wandb_logger = WandbLogger(
         project=config.project_name,
         config=config.__dict__,
-        name=args.run_name+'_ae',
+        name=args.run_name,
         log_model=True,)
-    wandb_logger_diffusion = WandbLogger(
-        project=config.project_name,
-        config=config.__dict__,
-        name=args.run_name+'_diffusion',
-        log_model=True,)
-    wandb_logger_eval = WandbLogger(
-        project=config.project_name,
-        config=config.__dict__,
-        name=args.run_name+'_eval',)
-    wandb_logger = {
-        'ae': wandb_logger_ae,
-        'diffusion': wandb_logger_diffusion,
-        'eval': wandb_logger_eval,
-    }
     print(config)
     model = train(config, wandb_logger=wandb_logger)
     evaluate_trained_model(model, wandb_logger=wandb_logger)

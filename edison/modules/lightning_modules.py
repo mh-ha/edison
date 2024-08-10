@@ -295,5 +295,6 @@ class BaselineDiffusion(BaseEdisonDiffusion):
         generated_data = self.generate(num_samples, seq_len, batch_size, seed)
         result = evaluate_model(generated_data, self.eval_data[:num_samples])
         for key, value in result.items():
-            self.log(f'eval_{key}', value)
+            if key in ['mauve', 'perplexity']:
+                self.log(f'eval_{key}', value, sync_dist=True)
         self.train()
