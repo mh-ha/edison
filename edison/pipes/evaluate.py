@@ -1,4 +1,4 @@
-from typing import Optional
+from typing import Optional, Dict
 
 from lightning.pytorch.loggers import WandbLogger
 
@@ -11,8 +11,9 @@ from edison.metrics.evaluation import evaluate_model
 def evaluate_trained_model(
     model: BaseEdisonDiffusion,
     saved_file_name='generated_samples.csv',
-    wandb_logger: Optional[WandbLogger] = None
+    wandb_logger: Dict[str, Optional[WandbLogger]] = None
 ):
+    wandb_logger_eval = wandb_logger.get('eval')
     model.eval()
     model.cuda()
     dataset = get_dataset('roc')
@@ -30,7 +31,7 @@ def evaluate_trained_model(
         gen = generated_data[i*1000:(i+1)*1000]
         ref = reference_data[i*1000:(i+1)*1000]
         result = evaluate_model(gen, ref)
-        if wandb_logger:
-            wandb_logger.log_metrics(result, step=i)
-            wandb_logger.log_table(key=f"text_generated_{i}", columns=['text'], data=[[text] for text in gen])
-            wandb_logger.log_table(key=f"text_reference_{i}", columns=['text'], data=[[text] for text in ref])
+        if wandb_logger_eval:
+            wandb_logger_eval.log_metrics(result, step=i)
+            wandb_logger_eval.log_table(key=f"text_generated_{i}", columns=['text'], data=[[text] for text in gen])
+            wandb_logger_eval.log_table(key=f"text_reference_{i}", columns=['text'], data=[[text] for text in ref])

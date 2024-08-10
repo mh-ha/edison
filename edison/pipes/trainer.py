@@ -1,3 +1,4 @@
+import torch
 import lightning as L
 from lightning.pytorch.strategies import DDPStrategy
 # from lightning.pytorch.profilers import PyTorchProfiler
@@ -8,7 +9,8 @@ from edison.configs.base import Config
 # TODO: 상세하게 구현
 def get_trainer(config: Config, logger=None, max_steps=250000):
     trainer = L.Trainer(
-        strategy=DDPStrategy(find_unused_parameters=True) if config.strategy == 'ddp' else "auto",
+        # strategy=DDPStrategy(find_unused_parameters=True) if config.strategy == 'ddp' else "auto",
+        strategy=DDPStrategy(find_unused_parameters=True) if torch.cuda.device_count() > 1 else "auto",
         # strategy=DDPStrategy() if config.strategy == 'ddp' else "auto",
         logger=logger,
         max_steps=max_steps,

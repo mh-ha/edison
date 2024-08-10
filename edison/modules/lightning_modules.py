@@ -3,6 +3,7 @@ from typing import Optional
 import torch
 from einops import einsum
 from tqdm import tqdm
+from transformers import get_scheduler
 from transformers.modeling_outputs import BaseModelOutput
 
 from edison.configs.base import Config
@@ -12,6 +13,8 @@ from edison.layers.base import BaseDiffusion
 from edison.layers.lm import get_BART
 from edison.modules import register_module
 from edison.modules.base import BaseEdisonAE, BaseEdisonDiffusion   # noqa: F401
+from edison.modules.lightning_data_modules import get_dataset
+from edison.metrics.evaluation import evaluate_model
 
 
 @register_module(name='edison_ae')
@@ -98,11 +101,17 @@ class EdisonAE(BaseEdisonAE):
             optimizer = torch.optim.AdamW(self.ae.parameters(), lr=self.config.learning_rate_peak_ae)
         else:
             optimizer = torch.optim.AdamW(self.parameters(), lr=self.config.learning_rate_peak_ae)
-        scheduler = torch.optim.lr_scheduler.LinearLR(
-            optimizer,
-            start_factor=1,
-            end_factor=0,
-            total_iters=self.config.max_steps_ae//(self.config.train_batch_size*8))
+        # scheduler = torch.optim.lr_scheduler.LinearLR(
+        #     optimizer,
+        #     start_factor=1,
+        #     end_factor=0,
+        #     total_iters=self.config.max_steps_ae//(self.config.train_batch_size*8))
+        scheduler = get_scheduler(
+            self.config.lr_schedule,
+            optimizer=optimizer,
+            num_warmup_steps=self.config.warmup_steps,
+            num_training_steps=self.config.max_steps_ae,
+        )
 
         # def lr_lambda(step):
         #     start_lr = self.config.learning_rate_warmup_start
@@ -162,9 +171,15 @@ class EdisonDiffusion(BaseEdisonDiffusion):
 
     def configure_optimizers(self):
         optimizer = torch.optim.AdamW(self.diffusion_model.parameters(), lr=self.config.learning_rate_peak_diffusion)
-        scheduler = torch.optim.lr_scheduler.LinearLR(
-            optimizer, start_factor=1, end_factor=0,
-            total_iters=self.config.max_steps_diffusion//(self.config.train_batch_size*8))
+        # scheduler = torch.optim.lr_scheduler.LinearLR(
+        #     optimizer, start_factor=1, end_factor=0,
+        #     total_iters=self.config.max_steps_diffusion//(self.config.train_batch_size*8))
+        scheduler = get_scheduler(
+            self.config.lr_schedule,
+            optimizer=optimizer,
+            num_warmup_steps=self.config.warmup_steps,
+            num_training_steps=self.config.max_steps_diffusion,
+        )
 
         # def lr_lambda(step):
         #     start_lr = self.config.learning_rate_warmup_start
@@ -219,6 +234,7 @@ class BaselineDiffusion(BaseEdisonDiffusion):
         self.autoencoder.freeze()
         self.tokenizer = self.autoencoder.tokenizer
         self.diffusion_model: BaseDiffusion = get_layer_module(module_name="baseline_diffusion_layer")(config=config)
+        self.eval_data = None
 
     def forward(self, latents, context_latents, attention_mask):
         loss = self.diffusion_model.training_step(
@@ -237,25 +253,22 @@ class BaselineDiffusion(BaseEdisonDiffusion):
         self.log('lr_diffusion', self.trainer.optimizers[0].param_groups[0]['lr'], on_step=True, prog_bar=True)
         return loss
 
+    def on_train_epoch_end(self):
+        if self.current_epoch % self.config.eval_epoch_interval == 0:
+            self.evaluate(self.config.eval_samples, self.config.max_seq_len, self.config.eval_batch_size, self.config.eval_seed)
+
     def configure_optimizers(self):
         optimizer = torch.optim.AdamW(self.diffusion_model.parameters(), lr=self.config.learning_rate_peak_diffusion)
-        scheduler = torch.optim.lr_scheduler.LinearLR(
-            optimizer, start_factor=1, end_factor=0,
-            total_iters=self.config.max_steps_diffusion//(self.config.train_batch_size*8),)
+        # scheduler = torch.optim.lr_scheduler.LinearLR(
+        #     optimizer, start_factor=1, end_factor=0,
+        #     total_iters=self.config.max_steps_diffusion//(self.config.train_batch_size*8),)
+        scheduler = get_scheduler(
+            self.config.lr_schedule,
+            optimizer=optimizer,
+            num_warmup_steps=self.config.warmup_steps,
+            num_training_steps=self.config.max_steps_diffusion,
+        )
 
-        # def lr_lambda(step):
-        #     start_lr = self.config.learning_rate_warmup_start
-        #     peak_lr = self.config.learning_rate_peak_diffusion
-        #     final_lr = self.config.learning_rate_final
-        #     warmup_steps = self.config.warmup_steps
-        #     total_steps = self.config.max_steps_diffusion
-        #     if step < warmup_steps:
-        #         return ((peak_lr - start_lr) / warmup_steps) * step + start_lr
-        #     elif step > warmup_steps and step < total_steps:
-        #         return ((peak_lr - final_lr) / (total_steps - warmup_steps)) * (total_steps - step) + final_lr
-        #     else:
-        #         return 0.
-        # scheduler = torch.optim.lr_scheduler.LambdaLR(optimizer, lr_lambda=lr_lambda)
         return {
             'optimizer': optimizer,
             'lr_scheduler': scheduler,
@@ -264,6 +277,7 @@ class BaselineDiffusion(BaseEdisonDiffusion):
     @torch.no_grad()
     def generate(self, num_samples, seq_len, batch_size=8, seed=42):
         torch.manual_seed(seed)
+        self.eval()
         generated_texts = []
 
         for i in tqdm(range(0, num_samples, batch_size)):
@@ -273,3 +287,12 @@ class BaselineDiffusion(BaseEdisonDiffusion):
             texts_list = [text.strip() for text in texts_list if len(text.strip()) > 0]
             generated_texts.extend(texts_list)
         return generated_texts
+
+    def evaluate(self, num_samples, seq_len, batch_size=8, seed=42):
+        if self.eval_data is None:
+            dataset = get_dataset('roc')
+            self.eval_data = dataset['valid']['text'] + dataset['test']['text']
+        generated_data = self.generate(num_samples, seq_len, batch_size, seed)
+        result = evaluate_model(generated_data, self.eval_data[:num_samples])
+        self.log_dict(result)
+        self.train()
