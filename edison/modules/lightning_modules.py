@@ -129,7 +129,12 @@ class EdisonAE(BaseEdisonAE):
         # scheduler = torch.optim.lr_scheduler.LambdaLR(optimizer, lr_lambda=lr_lambda)
         return {
             'optimizer': optimizer,
-            'lr_scheduler': scheduler,
+            'lr_scheduler': {
+                "scheduler": scheduler,
+                "interval": "step",
+                "frequency": 1,
+                "name": "lr_ae",
+            },
         }
 
 
@@ -197,7 +202,12 @@ class EdisonDiffusion(BaseEdisonDiffusion):
         # scheduler = torch.optim.lr_scheduler.LambdaLR(optimizer, lr_lambda=lr_lambda)
         return {
             'optimizer': optimizer,
-            'lr_scheduler': scheduler,
+            'lr_scheduler': {
+                "scheduler": scheduler,
+                "interval": "step",
+                "frequency": 1,
+                "name": "lr_diffusion",
+            },
         }
 
     @torch.no_grad()
@@ -272,7 +282,12 @@ class BaselineDiffusion(BaseEdisonDiffusion):
 
         return {
             'optimizer': optimizer,
-            'lr_scheduler': scheduler,
+            'lr_scheduler': {
+                "scheduler": scheduler,
+                "interval": "step",
+                "frequency": 1,
+                "name": "lr_diffusion",
+            },
         }
 
     @torch.no_grad()
