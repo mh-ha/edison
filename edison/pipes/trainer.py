@@ -14,7 +14,7 @@ def get_trainer(config: Config, logger=None, max_steps=250000):
         # strategy=DDPStrategy() if config.strategy == 'ddp' else "auto",
         logger=logger,
         max_steps=max_steps,
-        max_epochs=int('inf'),
+        max_epochs=-1,
         gradient_clip_val=config.gradient_clip_val,
         gradient_clip_algorithm=config.gradient_clip_algorithm,
         accumulate_grad_batches=config.gradient_accumulation_steps,
