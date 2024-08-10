@@ -29,7 +29,6 @@ class TrainFunction:
         model: BaseEdisonAE = get_module(module_name=self.config.ae_module_name)(self.config)
 
         # dataloader
-        self.config.train_batch_size = self.config.train_batch_size_ae
         self.dataloader = get_dataloader_from_name(self.config.dataloader_name)(
             self.config,
             self.dataset['train'],
@@ -47,7 +46,6 @@ class TrainFunction:
         diffusion: BaseEdisonDiffusion = get_module(module_name=self.config.diffusion_module_name)(self.config, autoencoder)
 
         # dataloader
-        self.config.train_batch_size = self.config.train_batch_size_ae
         self.dataloader = get_dataloader_from_name(self.config.dataloader_name)(
             self.config,
             self.dataset['train'],
@@ -66,8 +64,8 @@ def train(config: Config, wandb_logger: Dict[str, Optional[WandbLogger]] = None)
     high-level function.
     """
     trainer = TrainFunction(config, wandb_logger=wandb_logger)
-    model = trainer.train_AE()
-    # model: BaseEdisonAE = get_module(module_name=config.ae_module_name)(config)
+    # model = trainer.train_AE()
+    model: BaseEdisonAE = get_module(module_name=config.ae_module_name)(config)
     model.freeze()
     model = trainer.train_diffusion(autoencoder=model)
     return model

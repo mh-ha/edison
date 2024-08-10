@@ -100,7 +100,7 @@ def get_dataloader(
     dl = DataLoader(
             dataset,
             collate_fn=collate_fn,
-            batch_size=config.train_batch_size,
+            batch_size=config.train_batch_size_ae if mode == 'ae' else config.train_batch_size_diffusion,
             shuffle=shuffle,
             pin_memory=True,
             num_workers=4,

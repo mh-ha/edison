@@ -294,5 +294,6 @@ class BaselineDiffusion(BaseEdisonDiffusion):
             self.eval_data = dataset['valid']['text'] + dataset['test']['text']
         generated_data = self.generate(num_samples, seq_len, batch_size, seed)
         result = evaluate_model(generated_data, self.eval_data[:num_samples])
-        self.log_dict(result)
+        for key, value in result.items():
+            self.log(f'eval_{key}', value)
         self.train()
