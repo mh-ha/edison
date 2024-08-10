@@ -28,6 +28,7 @@ class TrainFunction:
         model: BaseEdisonAE = get_module(module_name=self.config.ae_module_name)(self.config)
 
         # dataloader
+        self.config.train_batch_size = self.config.train_batch_size_ae
         self.dataloader = get_dataloader_from_name(self.config.dataloader_name)(
             self.config,
             self.dataset['train'],
@@ -45,6 +46,7 @@ class TrainFunction:
         diffusion: BaseEdisonDiffusion = get_module(module_name=self.config.diffusion_module_name)(self.config, autoencoder)
 
         # dataloader
+        self.config.train_batch_size = self.config.train_batch_size_diffusion
         self.dataloader = get_dataloader_from_name(self.config.dataloader_name)(
             self.config,
             self.dataset['train'],
