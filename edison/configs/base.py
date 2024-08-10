@@ -64,8 +64,8 @@ class Config:
 
     # Evaluation
     eval_epoch_interval: int = 1
-    eval_samples: int = 100
-    eval_batch_size: int = 100
+    eval_samples: int = 128
+    eval_batch_size: int = 128
     eval_seed: int = 42
 
     # Generation

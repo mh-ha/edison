@@ -1,4 +1,5 @@
 from typing import Optional
+import random
 
 import torch
 from einops import einsum
@@ -276,7 +277,7 @@ class BaselineDiffusion(BaseEdisonDiffusion):
 
     @torch.no_grad()
     def generate(self, num_samples, seq_len, batch_size=8, seed=42):
-        torch.manual_seed(seed)
+        # torch.manual_seed(seed)
         self.eval()
         generated_texts = []
 
@@ -293,8 +294,9 @@ class BaselineDiffusion(BaseEdisonDiffusion):
             dataset = get_dataset('roc')
             self.eval_data = dataset['valid']['text'] + dataset['test']['text']
         generated_data = self.generate(num_samples, seq_len, batch_size, seed)
-        result = evaluate_model(generated_data, self.eval_data[:num_samples])
+        reference_data = random.sample(self.eval_data, num_samples)
+        result = evaluate_model(generated_data, reference_data)
         for key, value in result.items():
             if key in ['mauve', 'perplexity']:
-                self.log(f'eval_{key}', value, sync_dist=True)
+                self.log(f'eval_{key}', value, sync_dist_group=True)
         self.train()
