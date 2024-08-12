@@ -247,7 +247,7 @@ class BaselineDiffusion(BaseEdisonDiffusion):
         self.diffusion_model: BaseDiffusion = get_layer_module(module_name="baseline_diffusion_layer")(config=config)
         self.eval_data = None
 
-    def forward(self, latents, context_latents, attention_mask):
+    def forward(self, latents, context_latents=None, attention_mask=None):
         loss = self.diffusion_model.training_step(
             latent=latents,
             context=context_latents,

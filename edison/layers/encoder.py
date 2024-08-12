@@ -3,7 +3,7 @@ from torch import nn, Tensor, einsum
 from einops import rearrange, repeat
 
 from edison.layers.base import BaseEncoder
-from edison.layers.residual import TimeConditionedResidual, GRUGating
+from edison.layers.residual import TimeConditionedResidual, GRUGating, Residual
 from edison.layers.positional_embedding import SinusoidalPosEmb, ConsciousnessEmbedding, RelativePositionEmbedding
 
 
@@ -91,7 +91,7 @@ class Attention(nn.Module):
         self.words_to_k = nn.Linear(self.dim if cross_dim is None else cross_dim, self.head_dim*self.num_heads, bias=False)
         self.words_to_v = nn.Linear(self.dim if cross_dim is None else cross_dim, self.head_dim*self.num_heads, bias=False)
         self.dropout = nn.Dropout(dropout)
-        self.to_out = nn.Linear(self.head_dim*self.num_heads, self.dim)
+        self.to_out = nn.Linear(self.head_dim*self.num_heads, self.dim, bias=False)
 
     def forward(self, words, rpe_words=None, cross_kv=None, rpe_cross=None):
         # print(f"[Attention.forward.entry] context: {words.shape}, words: {cross_kv.shape}")
@@ -162,10 +162,10 @@ class Encoder(BaseEncoder):
                 nn.ModuleList([
                     nn.LayerNorm(internal_dim),
                     XTAttention(internal_dim, internal_dim, num_heads=num_heads),
-                    GRUGating(internal_dim),
+                    Residual(internal_dim),
                     nn.LayerNorm(internal_dim),
                     XTAttention(internal_dim, num_heads=num_heads),
-                    GRUGating(internal_dim),
+                    Residual(internal_dim),
                     nn.LayerNorm(internal_dim),
                     FeedForwardWithGLU(internal_dim, ff_mult),
                     TimeConditionedResidual(internal_dim*ff_mult, internal_dim),
@@ -174,10 +174,10 @@ class Encoder(BaseEncoder):
         self.last_layers_for_embedding = nn.ModuleList([
             nn.LayerNorm(internal_dim),
             XTAttention(internal_dim, num_heads=num_heads),
-            GRUGating(internal_dim),
+            Residual(internal_dim),
             nn.LayerNorm(internal_dim),
             XTAttention(internal_dim, num_heads=num_heads),
-            GRUGating(internal_dim),
+            Residual(internal_dim),
             nn.LayerNorm(internal_dim),
             FeedForwardWithGLU(internal_dim, ff_mult),
             TimeConditionedResidual(internal_dim*ff_mult, internal_dim),
@@ -190,10 +190,10 @@ class Encoder(BaseEncoder):
                 nn.ModuleList([
                     nn.LayerNorm(internal_dim),
                     Attention(internal_dim, internal_dim, num_heads=num_heads),
-                    GRUGating(internal_dim),
+                    Residual(internal_dim),
                     nn.LayerNorm(internal_dim),
                     Attention(internal_dim, num_heads=num_heads),
-                    GRUGating(internal_dim),
+                    Residual(internal_dim),
                     nn.LayerNorm(internal_dim),
                     FeedForwardWithGLU(internal_dim, ff_mult),
                     TimeConditionedResidual(internal_dim*ff_mult, internal_dim),
@@ -356,7 +356,7 @@ class BaselineEncoder(BaseEncoder):
                 nn.ModuleList([
                     nn.LayerNorm(internal_dim),
                     Attention(internal_dim, num_heads=num_heads),
-                    GRUGating(internal_dim),
+                    Residual(internal_dim),
                     nn.LayerNorm(internal_dim),
                     FeedForwardWithGLU(internal_dim, ff_mult),
                     TimeConditionedResidual(internal_dim*ff_mult, internal_dim),

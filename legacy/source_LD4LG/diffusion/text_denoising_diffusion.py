@@ -504,7 +504,7 @@ class GaussianDiffusion(nn.Module):
         else:
             raise ValueError(f'invalid loss type {self.loss_type}')
 
-    def forward(self, txt_latent, mask, class_id, seq2seq_cond=None, seq2seq_mask=None, return_x_start=False, *args, **kwargs):
+    def forward(self, txt_latent, mask, class_id=None, seq2seq_cond=None, seq2seq_mask=None, return_x_start=False, *args, **kwargs):
         batch, l, d, device, max_seq_len, = *txt_latent.shape, txt_latent.device, self.max_seq_len
         assert l == max_seq_len, f'length must be {self.max_seq_len}'
         

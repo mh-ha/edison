@@ -14,6 +14,7 @@ warnings.filterwarnings("ignore")
 import CONSTANTS
 from diffusion.text_denoising_diffusion import GaussianDiffusion, Trainer
 from model.diffusion_transformer import DiffusionTransformer
+from torchinfo import summary
 
 ATTN_HEAD_DIM=64
 
@@ -74,7 +75,9 @@ def main(args):
         scale = args.scale,
     # ).cuda()
     )
-    print(diffusion)
+    txt_latent = torch.randn(4, 32, 64)
+    mask = torch.ones(4, 32)
+    print(summary(diffusion, input_data=[txt_latent, mask, None], depth=3))
 
     trainer = Trainer(
         args=args,
