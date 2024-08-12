@@ -66,7 +66,7 @@ class Config:
     num_dense_connections: int = 3
 
     # Evaluation
-    eval_epoch_interval: int = 20
+    eval_epoch_interval: int = 10
     eval_samples: int = 128
     eval_batch_size: int = 128
     eval_seed: int = 42
