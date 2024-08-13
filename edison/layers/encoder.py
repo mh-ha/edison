@@ -3,7 +3,7 @@ from torch import nn, Tensor, einsum
 from einops import rearrange, repeat
 
 from edison.layers.base import BaseEncoder
-from edison.layers.residual import TimeConditionedResidual, GRUGating, Residual
+from edison.layers.residual import TimeConditionedResidual, Residual
 from edison.layers.positional_embedding import SinusoidalPosEmb, ConsciousnessEmbedding, RelativePositionEmbedding
 
 
@@ -168,7 +168,7 @@ class Encoder(BaseEncoder):
                     Residual(internal_dim),
                     nn.LayerNorm(internal_dim),
                     FeedForwardWithGLU(internal_dim, ff_mult),
-                    TimeConditionedResidual(internal_dim*ff_mult, internal_dim),
+                    Residual(internal_dim),
                 ])
             )
         self.last_layers_for_embedding = nn.ModuleList([
@@ -180,7 +180,7 @@ class Encoder(BaseEncoder):
             Residual(internal_dim),
             nn.LayerNorm(internal_dim),
             FeedForwardWithGLU(internal_dim, ff_mult),
-            TimeConditionedResidual(internal_dim*ff_mult, internal_dim),
+            Residual(internal_dim),
         ])
 
         # Context
@@ -196,7 +196,7 @@ class Encoder(BaseEncoder):
                     Residual(internal_dim),
                     nn.LayerNorm(internal_dim),
                     FeedForwardWithGLU(internal_dim, ff_mult),
-                    TimeConditionedResidual(internal_dim*ff_mult, internal_dim),
+                    Residual(internal_dim),
                 ])
             )
 
@@ -297,8 +297,8 @@ class Encoder(BaseEncoder):
         context_residual = context
         latent = emb_ff(emb_norm3(latent))
         context = context_ff(context_norm3(context))
-        latent = emb_ff_residual(latent, emb_residual, time_emb)
-        context = context_ff_residual(context, context_residual, time_emb)
+        latent = emb_ff_residual(latent, emb_residual)
+        context = context_ff_residual(context, context_residual)
         return latent, context
 
     def _forward_last_layers(self, emb_layers, latent, context, rpe_words, conscious_words, time_emb):
@@ -315,7 +315,7 @@ class Encoder(BaseEncoder):
         latent = emb_self_attn_residual(latent, emb_residual)
         emb_residual = latent
         latent = emb_ff(emb_norm3(latent))
-        latent = emb_ff_residual(latent, emb_residual, time_emb)
+        latent = emb_ff_residual(latent, emb_residual)
         return latent
 
     def _maybe_dense_connection(self, idx, words, hidden_states: list):
@@ -359,7 +359,7 @@ class BaselineEncoder(BaseEncoder):
                     Residual(internal_dim),
                     nn.LayerNorm(internal_dim),
                     FeedForwardWithGLU(internal_dim, ff_mult),
-                    TimeConditionedResidual(internal_dim*ff_mult, internal_dim),
+                    Residual(internal_dim),
                 ])
             )
 
@@ -396,7 +396,7 @@ class BaselineEncoder(BaseEncoder):
 
         emb_residual = latent
         latent = emb_ff(emb_norm3(latent))
-        latent = emb_ff_residual(latent, emb_residual, time_emb)
+        latent = emb_ff_residual(latent, emb_residual)
         return latent
 
     def _maybe_dense_connection(self, idx, words, hidden_states: list):
