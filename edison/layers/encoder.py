@@ -3,7 +3,7 @@ from torch import nn, Tensor, einsum
 from einops import rearrange, repeat
 
 from edison.layers.base import BaseEncoder
-from edison.layers.residual import TimeConditionedResidual, Residual
+from edison.layers.residual import Residual
 from edison.layers.positional_embedding import SinusoidalPosEmb, ConsciousnessEmbedding, RelativePositionEmbedding
 
 
