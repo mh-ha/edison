@@ -1,5 +1,5 @@
 from typing import Optional
-import random
+# import random
 
 import torch
 from einops import einsum
@@ -309,7 +309,8 @@ class BaselineDiffusion(BaseEdisonDiffusion):
             dataset = get_dataset('roc')
             self.eval_data = dataset['valid']['text'] + dataset['test']['text']
         generated_data = self.generate(num_samples, seq_len, batch_size, seed)
-        reference_data = random.sample(self.eval_data, num_samples)
+        # reference_data = random.sample(self.eval_data, num_samples)
+        reference_data = self.eval_data[:num_samples]
         result = evaluate_model(generated_data, reference_data)
         for key, value in result.items():
             if key in ['mauve', 'perplexity']:
