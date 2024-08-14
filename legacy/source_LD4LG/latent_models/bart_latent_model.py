@@ -7,7 +7,8 @@ from dataclasses import dataclass
 from transformers.models.bart.modeling_bart import (
     BartForConditionalGeneration,
 )
-from latent_models.perceiver_ae import PerceiverAutoEncoder
+# from latent_models.perceiver_ae import PerceiverAutoEncoder
+from .perceiver_ae import PerceiverAutoEncoder
 from einops import rearrange
 
 
@@ -24,15 +25,14 @@ class BARTForConditionalGenerationLatent(BartForConditionalGeneration):
         hidden_state = encoder_outputs[0]
         latent = self.perceiver_ae.encode(hidden_state, attention_mask.bool())
         return latent
-        
+
     def get_decoder_input(self, diffusion_latent):
         return self.perceiver_ae.decode(diffusion_latent)
-    
+
     # Map encoder outputs to decoder inputs
     def encoder_output_to_decoder_input(self, encoder_outputs, attention_mask):
         diffusion_latent = self.get_diffusion_latent(encoder_outputs, attention_mask)
-            
+
         encoder_outputs['last_hidden_state'] = self.get_decoder_input(diffusion_latent)
-        
+
         return encoder_outputs
-    

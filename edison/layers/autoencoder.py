@@ -17,7 +17,7 @@ class FeedForward(nn.Module):
         self,
         dim: int,
         mult: int = 4,
-        dropout: float = 0.1,
+        dropout: float = 0.,
     ) -> None:
         super().__init__()
         hidden_dim = int(dim * mult)
@@ -118,7 +118,7 @@ class EdisonPerceiverAttention(nn.Module):
         v = rearrange(v, 'b n (h d) -> b h n d', h=h)
 
         # attention
-        attn = einsum('b h i d, b h j d  -> b h i j', self.query_norm(q), self.key_norm(k)) * self.scale
+        attn = einsum('b h i d, b h j d  -> b h i j', self.query_norm(q) * self.scale, self.key_norm(k))
         if exists(attention_mask):
             max_neg_value = -torch.finfo(attn.dtype).max
             attention_mask = F.pad(attention_mask, (0, latent.shape[-2]), value=True)  # differ from original perceiver
@@ -165,9 +165,7 @@ class EdisonPerceiverResampler(nn.Module):
         learnable_latent = repeat(self.learnable_latent, 'n d -> b n d', b=latent.shape[0])
 
         for attn_layer, ff_layer in self.layers:
-            residual = learnable_latent
-            learnable_latent = attn_layer(latent, learnable_latent, attention_mask)
-            learnable_latent = learnable_latent + residual
+            learnable_latent = attn_layer(latent, learnable_latent, attention_mask) + learnable_latent
             learnable_latent = ff_layer(learnable_latent) + learnable_latent
         out = self.final_norm(learnable_latent)
         out = self.l2_normalize_latents(out)

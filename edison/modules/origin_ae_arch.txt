@@ -1,0 +1,113 @@
+BARTForConditionalGenerationLatent(
+  (model): BartModel(
+    (shared): Embedding(50265, 768, padding_idx=1)
+    (encoder): BartEncoder(
+      (embed_tokens): Embedding(50265, 768, padding_idx=1)
+      (embed_positions): BartLearnedPositionalEmbedding(1026, 768)
+      (layers): ModuleList(
+        (0-5): 6 x BartEncoderLayer(
+          (self_attn): BartSdpaAttention(
+            (k_proj): Linear(in_features=768, out_features=768, bias=True)
+            (v_proj): Linear(in_features=768, out_features=768, bias=True)
+            (q_proj): Linear(in_features=768, out_features=768, bias=True)
+            (out_proj): Linear(in_features=768, out_features=768, bias=True)
+          )
+          (self_attn_layer_norm): LayerNorm((768,), eps=1e-05, elementwise_affine=True)
+          (activation_fn): GELUActivation()
+          (fc1): Linear(in_features=768, out_features=3072, bias=True)
+          (fc2): Linear(in_features=3072, out_features=768, bias=True)
+          (final_layer_norm): LayerNorm((768,), eps=1e-05, elementwise_affine=True)
+        )
+      )
+      (layernorm_embedding): LayerNorm((768,), eps=1e-05, elementwise_affine=True)
+    )
+    (decoder): BartDecoder(
+      (embed_tokens): Embedding(50265, 768, padding_idx=1)
+      (embed_positions): BartLearnedPositionalEmbedding(1026, 768)
+      (layers): ModuleList(
+        (0-5): 6 x BartDecoderLayer(
+          (self_attn): BartSdpaAttention(
+            (k_proj): Linear(in_features=768, out_features=768, bias=True)
+            (v_proj): Linear(in_features=768, out_features=768, bias=True)
+            (q_proj): Linear(in_features=768, out_features=768, bias=True)
+            (out_proj): Linear(in_features=768, out_features=768, bias=True)
+          )
+          (activation_fn): GELUActivation()
+          (self_attn_layer_norm): LayerNorm((768,), eps=1e-05, elementwise_affine=True)
+          (encoder_attn): BartSdpaAttention(
+            (k_proj): Linear(in_features=768, out_features=768, bias=True)
+            (v_proj): Linear(in_features=768, out_features=768, bias=True)
+            (q_proj): Linear(in_features=768, out_features=768, bias=True)
+            (out_proj): Linear(in_features=768, out_features=768, bias=True)
+          )
+          (encoder_attn_layer_norm): LayerNorm((768,), eps=1e-05, elementwise_affine=True)
+          (fc1): Linear(in_features=768, out_features=3072, bias=True)
+          (fc2): Linear(in_features=3072, out_features=768, bias=True)
+          (final_layer_norm): LayerNorm((768,), eps=1e-05, elementwise_affine=True)
+        )
+      )
+      (layernorm_embedding): LayerNorm((768,), eps=1e-05, elementwise_affine=True)
+    )
+  )
+  (lm_head): Linear(in_features=768, out_features=50265, bias=False)
+  (perceiver_ae): PerceiverAutoEncoder(
+    (perceiver_encoder): PerceiverResampler(
+      (pos_emb): AbsolutePositionalEmbedding(
+        (emb): Embedding(64, 768)
+      )
+      (layers): ModuleList(
+        (0-2): 3 x ModuleList(
+          (0): PerceiverAttention(
+            (norm): LayerNorm((768,), eps=1e-05, elementwise_affine=True)
+            (norm_latents): LayerNorm((64,), eps=1e-05, elementwise_affine=True)
+            (query_norm): RMSNorm()
+            (key_norm): RMSNorm()
+            (to_q): Linear(in_features=64, out_features=768, bias=False)
+            (latent_to_kv): Linear(in_features=64, out_features=1536, bias=False)
+            (to_kv): Linear(in_features=768, out_features=1536, bias=False)
+            (to_out): Sequential(
+              (0): Linear(in_features=768, out_features=64, bias=True)
+            )
+          )
+          (1): Sequential(
+            (0): LayerNorm((64,), eps=1e-05, elementwise_affine=True)
+            (1): Linear(in_features=64, out_features=256, bias=True)
+            (2): GELU(approximate='none')
+            (3): Dropout(p=0.0, inplace=False)
+            (4): Linear(in_features=256, out_features=64, bias=True)
+          )
+        )
+      )
+      (final_norm): LayerNorm((64,), eps=1e-05, elementwise_affine=True)
+      (output_proj): Identity()
+    )
+    (perceiver_decoder): Transformer(
+      (pos_emb): AbsolutePositionalEmbedding(
+        (emb): Embedding(32, 768)
+      )
+      (input_proj): Linear(in_features=64, out_features=768, bias=True)
+      (layers): ModuleList(
+        (0-2): 3 x ModuleList(
+          (0): Attention(
+            (norm): LayerNorm((768,), eps=1e-05, elementwise_affine=True)
+            (query_norm): RMSNorm()
+            (key_norm): RMSNorm()
+            (to_q): Linear(in_features=768, out_features=768, bias=False)
+            (to_k): Linear(in_features=768, out_features=768, bias=False)
+            (to_v): Linear(in_features=768, out_features=768, bias=False)
+            (to_out): Linear(in_features=768, out_features=768, bias=True)
+          )
+          (1): Sequential(
+            (0): LayerNorm((768,), eps=1e-05, elementwise_affine=True)
+            (1): Linear(in_features=768, out_features=3072, bias=True)
+            (2): GELU(approximate='none')
+            (3): Dropout(p=0.0, inplace=False)
+            (4): Linear(in_features=3072, out_features=768, bias=True)
+          )
+        )
+      )
+      (final_norm): LayerNorm((768,), eps=1e-05, elementwise_affine=True)
+      (output_proj): Identity()
+    )
+  )
+)

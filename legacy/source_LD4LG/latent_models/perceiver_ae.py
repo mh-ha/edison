@@ -8,7 +8,7 @@ import torch.nn.functional as F
 
 from einops import rearrange, reduce, repeat
 
-from model.x_transformer import AbsolutePositionalEmbedding
+from ..model.x_transformer import AbsolutePositionalEmbedding
 
 
 def exists(x):

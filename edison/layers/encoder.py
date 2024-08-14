@@ -3,7 +3,7 @@ from torch import nn, Tensor, einsum
 from einops import rearrange, repeat
 
 from edison.layers.base import BaseEncoder
-from edison.layers.residual import Residual
+from edison.layers.residual import Residual, TimeConditionedResidual
 from edison.layers.positional_embedding import SinusoidalPosEmb, ConsciousnessEmbedding, RelativePositionEmbedding
 
 
@@ -359,7 +359,7 @@ class BaselineEncoder(BaseEncoder):
                     Residual(internal_dim),
                     nn.LayerNorm(internal_dim),
                     FeedForwardWithGLU(internal_dim, ff_mult),
-                    Residual(internal_dim),
+                    TimeConditionedResidual(internal_dim*4, internal_dim),
                 ])
             )
 
@@ -396,7 +396,7 @@ class BaselineEncoder(BaseEncoder):
 
         emb_residual = latent
         latent = emb_ff(emb_norm3(latent))
-        latent = emb_ff_residual(latent, emb_residual)
+        latent = emb_ff_residual(latent, emb_residual, time_emb)
         return latent
 
     def _maybe_dense_connection(self, idx, words, hidden_states: list):
