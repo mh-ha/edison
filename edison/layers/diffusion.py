@@ -396,8 +396,9 @@ class BaselineDiffusionLayer(BaseDiffusion):
 
         latents_shape = (batch_size, self.config.num_encoder_latents, self.config.dim_ae)
         latents = torch.randn(latents_shape, device=device)
-        latent_mask = [[True] * length + [False] * (self.config.num_encoder_latents - length) for length in lengths]
-        latent_mask = torch.tensor(latent_mask, dtype=torch.bool, device=device)
+        # latent_mask = [[True] * length + [False] * (self.config.num_encoder_latents - length) for length in lengths]
+        # latent_mask = torch.tensor(latent_mask, dtype=torch.bool, device=device)
+        latent_mask = torch.ones((batch_size, self.config), dtype=torch.bool, device=device)
         self_cond = None
 
         for time, time_next in tqdm(time_pairs, total=self.config.sampling_timesteps):
@@ -421,5 +422,6 @@ class BaselineDiffusionLayer(BaseDiffusion):
             noise = torch.randn_like(latents)
             latents = 1 / alpha_now.sqrt() * (latents - (1 - alpha_now) / (1 - alpha).sqrt() * pred_eps)
             latents = latents + (torch.sqrt(1 - alpha_now) * noise)
+            self_cond = pred_x_start
 
         return latents, latent_mask

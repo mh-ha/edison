@@ -20,8 +20,8 @@ def evaluate_trained_model(
     generated_data = generate_from_model(
         model=model,
         num_samples=5000,
-        batch_size=128,
-        seq_len=64,
+        batch_size=250,
+        # seq_len=64,
         saved_file_name=saved_file_name
     )
     generated_data = generated_data['text'].tolist()

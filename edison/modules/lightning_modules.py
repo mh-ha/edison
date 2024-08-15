@@ -266,7 +266,12 @@ class BaselineDiffusion(BaseEdisonDiffusion):
 
     def on_train_epoch_end(self):
         if self.current_epoch % self.config.eval_epoch_interval == 0:
-            self.evaluate(self.config.eval_samples, self.config.max_seq_len, self.config.eval_batch_size, self.config.eval_seed)
+            self.evaluate(
+                num_samples=self.config.eval_samples,
+                # self.config.max_seq_len,
+                batch_size=self.config.eval_batch_size,
+                seed=self.config.eval_seed,
+            )
 
     def configure_optimizers(self):
         optimizer = torch.optim.AdamW(self.diffusion_model.parameters(), lr=self.config.learning_rate_peak_diffusion)
@@ -291,7 +296,7 @@ class BaselineDiffusion(BaseEdisonDiffusion):
         }
 
     @torch.no_grad()
-    def generate(self, num_samples, seq_len, batch_size=8, seed=42):
+    def generate(self, num_samples, seq_len=64, batch_size=8, seed=42):
         # torch.manual_seed(seed)
         self.eval()
         generated_texts = []
@@ -304,7 +309,7 @@ class BaselineDiffusion(BaseEdisonDiffusion):
             generated_texts.extend(texts_list)
         return generated_texts
 
-    def evaluate(self, num_samples, seq_len, batch_size=8, seed=42):
+    def evaluate(self, num_samples, seq_len=64, batch_size=8, seed=42):
         if self.eval_data is None:
             dataset = get_dataset('roc')
             self.eval_data = dataset['valid']['text'] + dataset['test']['text']
