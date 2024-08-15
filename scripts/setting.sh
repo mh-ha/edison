@@ -7,7 +7,9 @@ cd ~/edison_storage/edison
 conda env create -f conda.yaml
 conda init bash
 source ~/.bashrc
+. $HOME/.miniconda3/etc/profile.d/conda.sh
 conda activate edison
 
 # Download the spaCy model en_core_web_sm
 python -m spacy download en_core_web_sm
+wandb login
