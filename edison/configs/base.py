@@ -20,12 +20,12 @@ class Config:
     dataloader_name: str = 'get_dataloader'
     max_steps_ae: int = 50000
     max_steps_diffusion: int = 250000
-    # train_batch_size: int = 32
-    # train_batch_size_ae: int = 32
-    # train_batch_size_diffusion: int = 16
-    train_batch_size: int = 256
-    train_batch_size_ae: int = 256
-    train_batch_size_diffusion: int = 128
+    train_batch_size: int = 32
+    train_batch_size_ae: int = 32
+    train_batch_size_diffusion: int = 16
+    # train_batch_size: int = 256
+    # train_batch_size_ae: int = 256
+    # train_batch_size_diffusion: int = 128
     max_seq_len: int = 64
     dropout: float = 0.1
 
