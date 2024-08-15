@@ -398,7 +398,7 @@ class BaselineDiffusionLayer(BaseDiffusion):
         latents = torch.randn(latents_shape, device=device)
         # latent_mask = [[True] * length + [False] * (self.config.num_encoder_latents - length) for length in lengths]
         # latent_mask = torch.tensor(latent_mask, dtype=torch.bool, device=device)
-        latent_mask = torch.ones((batch_size, self.config), dtype=torch.bool, device=device)
+        latent_mask = torch.ones((batch_size, self.config.num_encoder_latents), dtype=torch.bool, device=device)
         self_cond = None
 
         for time, time_next in tqdm(time_pairs, total=self.config.sampling_timesteps):
