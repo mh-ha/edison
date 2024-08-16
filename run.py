@@ -20,7 +20,11 @@ def main():
     args = parser.parse_args()
 
     if args.batch_size:
-        config = Config(train_batch_size=args.batch_size)
+        config = Config(
+            train_batch_size=args.batch_size,
+            train_batch_size_ae=args.batch_size,
+            train_batch_size_diffusion=args.batch_size//2,
+        )
     else:
         config = Config()
     wandb_logger = WandbLogger(
