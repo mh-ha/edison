@@ -6,7 +6,6 @@ from lightning.pytorch.strategies import DDPStrategy
 from edison.configs.base import Config
 
 
-# TODO: 상세하게 구현
 def get_trainer(config: Config, logger=None, max_steps=250000):
     trainer = L.Trainer(
         # strategy=DDPStrategy(find_unused_parameters=True) if config.strategy == 'ddp' else "auto",

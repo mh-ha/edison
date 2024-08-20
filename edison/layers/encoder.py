@@ -409,3 +409,81 @@ class BaselineEncoder(BaseEncoder):
             return words, hidden_states
         else:
             return words, hidden_states
+
+
+class DiscreteDiffusionEncoder(BaseEncoder):
+    def __init__(
+        self,
+        internal_dim: int,
+        depth: int,
+        num_heads: int = 8,
+        ff_mult: int = 4,
+        max_seq_len: int = 64,
+        num_dense_connections: int = 3
+    ):
+        super().__init__(
+            internal_dim=internal_dim,
+            depth=depth,
+        )
+        self.ff_mult = ff_mult
+        self.num_dense_connections = num_dense_connections
+
+        self.layers = nn.ModuleList()
+        for _ in range(depth-1):
+            self.layers.append(
+                nn.ModuleList([
+                    nn.LayerNorm(internal_dim),
+                    Attention(internal_dim, num_heads=num_heads),
+                    Residual(internal_dim),
+                    nn.LayerNorm(internal_dim),
+                    FeedForwardWithGLU(internal_dim, ff_mult),
+                    TimeConditionedResidual(internal_dim*4, internal_dim),
+                ])
+            )
+
+        self.proj_dense_connection = nn.ModuleList(
+            [nn.Linear(internal_dim*2, internal_dim) for _ in range(num_dense_connections)]
+        )
+
+    def forward(
+        self,
+        latent: Tensor,
+        attention_mask: Tensor,
+        time_emb: Tensor,
+        **kwargs,
+    ) -> Tensor:
+        emb_hidden_states = []
+
+        for i, layers in enumerate(self.layers):
+            latent = self._forward_layers(
+                layers, latent, time_emb, rpe=None
+            )
+            # Dense connection
+            latent, emb_hidden_states = self._maybe_dense_connection(i, latent, emb_hidden_states)
+        return latent
+
+    def _forward_layers(self, layers, latent, time_emb, rpe=None):
+        (
+            emb_norm2, emb_self_attn_2, emb_self_attn_residual_2,
+            emb_norm3, emb_ff, emb_ff_residual
+        ) = layers
+
+        emb_residual = latent
+        latent = emb_self_attn_2(emb_norm2(latent), rpe)
+        latent = emb_self_attn_residual_2(latent, emb_residual)
+
+        emb_residual = latent
+        latent = emb_ff(emb_norm3(latent))
+        latent = emb_ff_residual(latent, emb_residual, time_emb)
+        return latent
+
+    def _maybe_dense_connection(self, idx, words, hidden_states: list):
+        if idx < self.num_dense_connections:
+            hidden_states.append(words)
+            return words, hidden_states
+        elif idx >= (len(self.layers) - self.num_dense_connections):
+            proj_index = idx - (len(self.layers) - self.num_dense_connections)
+            words = self.proj_dense_connection[proj_index](torch.cat([words, hidden_states.pop(-1)], dim=-1))
+            return words, hidden_states
+        else:
+            return words, hidden_states
