@@ -281,7 +281,7 @@ class BaselineDiffusion(BaseEdisonDiffusion):
 
     @torch.no_grad()
     def generate(self, num_samples, seq_len=64, batch_size=8, seed=42):
-        # torch.manual_seed(seed)
+        torch.manual_seed(seed)
         self.eval()
         generated_texts = []
 
@@ -296,10 +296,9 @@ class BaselineDiffusion(BaseEdisonDiffusion):
     def evaluate(self, num_samples, seq_len=64, batch_size=8, seed=42):
         if self.eval_data is None:
             dataset = get_dataset('roc')
-            self.eval_data = dataset['valid']['text'] + dataset['test']['text']
+            self.eval_data = dataset['test']['text'] + dataset['valid']['text']
         generated_data = self.generate(num_samples, seq_len, batch_size, seed)
-        reference_data = random.sample(self.eval_data, num_samples)
-        # reference_data = self.eval_data[:num_samples]
+        reference_data = self.eval_data[:num_samples]
         result = evaluate_model(generated_data, reference_data)
         for key, value in result.items():
             if key in ['mauve', 'perplexity']:

@@ -1,5 +1,6 @@
 from typing import Optional
 
+import torch
 from lightning.pytorch.loggers import WandbLogger
 
 from edison.modules.base import BaseEdisonDiffusion
@@ -13,6 +14,7 @@ def evaluate_trained_model(
     saved_file_name='generated_samples.csv',
     wandb_logger: Optional[WandbLogger] = None
 ):
+    torch.cuda.empty_cache()
     model.eval()
     model.cuda()
     dataset = get_dataset('roc')
