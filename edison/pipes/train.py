@@ -66,8 +66,8 @@ def train(config: Config, wandb_logger: Optional[WandbLogger] = None):
     high-level function.
     """
     trainer = TrainFunction(config, wandb_logger=wandb_logger)
-    # model = trainer.train_AE()
-    model: BaseEdisonAE = get_module(module_name=config.ae_module_name)(config)
+    model = trainer.train_AE()
+    # model: BaseEdisonAE = get_module(module_name=config.ae_module_name)(config)
     torch.cuda.empty_cache()
     model.freeze()
     model = trainer.train_diffusion(autoencoder=model)
