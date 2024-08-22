@@ -350,7 +350,6 @@ class BaselineDiffusionLayer(BaseDiffusion):
         alpha = utils.time_to_alpha(times, latent.ndim)
         target = alpha.sqrt() * noise - (1 - alpha).sqrt() * latent
         latent = alpha.sqrt() * latent + (1 - alpha).sqrt() * noise
-        # TODO: add context process?
 
         # self-conditioning
         self_cond = None

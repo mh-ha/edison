@@ -351,7 +351,7 @@ class BaselineEncoder(BaseEncoder):
 
         # Embedding
         self.layers = nn.ModuleList()
-        for _ in range(depth-1):
+        for _ in range(depth):
             self.layers.append(
                 nn.ModuleList([
                     nn.LayerNorm(internal_dim),
@@ -377,11 +377,11 @@ class BaselineEncoder(BaseEncoder):
         emb_hidden_states = []
 
         for i, layers in enumerate(self.layers):
+            # Dense connection
+            latent, emb_hidden_states = self._maybe_dense_connection(i, latent, emb_hidden_states)
             latent = self._forward_layers(
                 layers, latent, time_emb, rpe=None
             )
-            # Dense connection
-            latent, emb_hidden_states = self._maybe_dense_connection(i, latent, emb_hidden_states)
         return latent
 
     def _forward_layers(self, layers, latent, time_emb, rpe=None):
@@ -429,7 +429,7 @@ class DiscreteDiffusionEncoder(BaseEncoder):
         self.num_dense_connections = num_dense_connections
 
         self.layers = nn.ModuleList()
-        for _ in range(depth-1):
+        for _ in range(depth):
             self.layers.append(
                 nn.ModuleList([
                     nn.LayerNorm(internal_dim),
