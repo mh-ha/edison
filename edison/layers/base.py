@@ -100,8 +100,8 @@ class BaseDiffusion(nn.Module, ABC):
     ) -> Tensor:
         return (1 - alpha).sqrt() * latent + alpha.sqrt() * v
 
-    # def _predict_noise_from_start(self, latent, alpha, x0):
-    #     return (latent - alpha.sqrt() * x0) / (1 - alpha).sqrt().clamp(min=1e-8)
+    def _predict_noise_from_start(self, latent, alpha, x0):
+        return (latent - alpha.sqrt() * x0) / (1 - alpha).sqrt().clamp(min=1e-8)
 
     # def _predict_v_from_start_and_eps(self, latent, alpha, x, noise):
     #     return alpha.sqrt() * noise - x * (1 - alpha).sqrt()

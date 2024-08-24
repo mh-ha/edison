@@ -1,5 +1,4 @@
 from typing import Optional
-import random
 
 import torch
 from einops import einsum
@@ -259,9 +258,6 @@ class BaselineDiffusion(BaseEdisonDiffusion):
 
     def configure_optimizers(self):
         optimizer = torch.optim.AdamW(self.diffusion_model.parameters(), lr=self.config.learning_rate_peak_diffusion)
-        # scheduler = torch.optim.lr_scheduler.LinearLR(
-        #     optimizer, start_factor=1, end_factor=0,
-        #     total_iters=self.config.max_steps_diffusion//(self.config.train_batch_size*8),)
         scheduler = get_scheduler(
             self.config.lr_schedule,
             optimizer=optimizer,
@@ -312,34 +308,26 @@ class DiscreteDiffusion(BaseEdisonDiffusion):
         self,
         config: Config,
         autoencoder: Optional[EdisonAE] = None,
+        tokenizer=None,
     ):
         super().__init__(config=config, autoencoder=autoencoder)
         self.save_hyperparameters('config')
-        if autoencoder is None:
-            if self.config.pretrained_ae_path is None:
-                self.autoencoder = EdisonAE(config)
-                print("Model initialized.")
-            else:
-                self.autoencoder = EdisonAE.load_from_checkpoint(self.config.pretrained_ae_path)
-                print("Model loaded from checkpoint.")
-        self.autoencoder.freeze()
-        self.tokenizer = self.autoencoder.tokenizer
-        self.diffusion_model: BaseDiffusion = get_layer_module(module_name="baseline_diffusion_layer")(config=config)
+        self.tokenizer = tokenizer
+        self.diffusion_model: BaseDiffusion = get_layer_module(module_name="discrete_diffusion_layer")(config=config)
         self.eval_data = None
 
-    def forward(self, latents, context_latents=None, attention_mask=None):
+    def forward(self, input_ids, attention_mask=None):
         loss = self.diffusion_model.training_step(
-            latent=latents,
-            context=context_latents,
+            input_ids=input_ids,
             attention_mask=attention_mask,)
         return loss
 
     def training_step(self, batch, batch_idx):
         inputs = batch['input_ids']
         attention_mask = batch['attention_mask']
-        latents = self.autoencoder.encode(inputs, attention_mask, return_embeddings=False)
-        context_latents = None
-        loss = self(latents, context_latents, attention_mask)
+        loss = self.diffusion_model.training_step(
+            input_ids=inputs,
+            attention_mask=attention_mask,)
         self.log('loss_diffusion', loss, on_step=True, prog_bar=True)
         self.log('lr_diffusion', self.trainer.optimizers[0].param_groups[0]['lr'], on_step=True, prog_bar=True)
         return loss
@@ -355,9 +343,6 @@ class DiscreteDiffusion(BaseEdisonDiffusion):
 
     def configure_optimizers(self):
         optimizer = torch.optim.AdamW(self.diffusion_model.parameters(), lr=self.config.learning_rate_peak_diffusion)
-        # scheduler = torch.optim.lr_scheduler.LinearLR(
-        #     optimizer, start_factor=1, end_factor=0,
-        #     total_iters=self.config.max_steps_diffusion//(self.config.train_batch_size*8),)
         scheduler = get_scheduler(
             self.config.lr_schedule,
             optimizer=optimizer,
@@ -394,10 +379,9 @@ class DiscreteDiffusion(BaseEdisonDiffusion):
             dataset = get_dataset('roc')
             self.eval_data = dataset['valid']['text'] + dataset['test']['text']
         generated_data = self.generate(num_samples, seq_len, batch_size, seed)
-        reference_data = random.sample(self.eval_data, num_samples)
-        # reference_data = self.eval_data[:num_samples]
+        reference_data = self.eval_data[:num_samples]
         result = evaluate_model(generated_data, reference_data)
         for key, value in result.items():
-            if key in ['mauve', 'perplexity']:
+            if key in ['mauve', 'perplexity', 'diversity', 'memorization']:
                 self.log(f'eval_{key}', value, sync_dist_group=True)
         self.train()

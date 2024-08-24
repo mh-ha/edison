@@ -28,11 +28,15 @@ def evaluate_trained_model(
     )
     generated_data = generated_data['text'].tolist()
 
+    results = []
     for i in range(5):
         gen = generated_data[i*1000:(i+1)*1000]
         ref = reference_data[i*1000:(i+1)*1000]
         result = evaluate_model(gen, ref)
+        results.append(result)
         if wandb_logger:
             wandb_logger.log_metrics(result, step=i)
             wandb_logger.log_table(key=f"text_generated_{i}", columns=['text'], data=[[text] for text in gen])
             wandb_logger.log_table(key=f"text_reference_{i}", columns=['text'], data=[[text] for text in ref])
+    for key in results[0].keys():
+        wandb_logger.log_metrics({key+"_mean": sum([result[key] for result in results])/5})

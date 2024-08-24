@@ -440,6 +440,8 @@ class DiscreteDiffusionLayer(BaseDiffusion):
         self.input_dim = config.dim_ae
         self.internal_dim = config.internal_dim
         self.output_dim = config.dim_ae
+        self.use_mask = config.use_mask
+        self.embedding = config.embedding
 
         # layers
         self.encoder = DiscreteDiffusionEncoder(
@@ -468,20 +470,18 @@ class DiscreteDiffusionLayer(BaseDiffusion):
         self_cond: Optional[Tensor] = None,
     ) -> DiffusionOutput:
         alpha = utils.time_to_alpha(times)
-        encoded = self.encode(
+        pred_start = self.encode(
             latent=latent,
             context=context,
             alpha=alpha,
             attention_mask=attention_mask,
             self_cond=self_cond,)
-        alpha = utils.time_to_alpha(times, encoded.ndim)
-        pred_start = self._predict_start_from_v(latent, alpha, encoded)
-        pred_noise = self._predict_noise_from_v(latent, alpha, encoded)
-        pred_v = encoded
+        alpha = utils.time_to_alpha(times, pred_start.ndim)
+        pred_noise = self._predict_noise_from_start(latent, alpha, pred_start)
         return DiffusionOutput(
             pred_start=pred_start,
             pred_noise=pred_noise,
-            pred_v=pred_v,)
+            pred_v=None,)
 
     def encode(
         self,
@@ -532,16 +532,17 @@ class DiscreteDiffusionLayer(BaseDiffusion):
 
     def training_step(
         self,
-        latent: Tensor,
-        context: Optional[Tensor],
+        token_ids: Tensor,
         attention_mask: Tensor,
+        blank_token_id: int,
     ) -> Tensor:
-        # generate times, noise, alpha, target
-        times = torch.zeros((latent.shape[0],)).uniform_(0, 1.).to(latent.device)
-        noise = torch.randn_like(latent).to(latent.device)
-        alpha = utils.time_to_alpha(times, latent.ndim)
-        target = alpha.sqrt() * noise - (1 - alpha).sqrt() * latent
-        latent = alpha.sqrt() * latent + (1 - alpha).sqrt() * noise
+        (
+            x_t, new_attention_mask, target, times, alpha, kappa, gamma
+        ) = self.forward_process(token_ids, attention_mask, blank_token_id)
+        # token_ids to embedding
+        latent = self.embedding(x_t)
+        context = None
+        # TODO: check time embedding
 
         # self-conditioning
         self_cond = None
@@ -566,8 +567,9 @@ class DiscreteDiffusionLayer(BaseDiffusion):
             attention_mask=attention_mask,
             self_cond=self_cond,)
 
-        # calculate loss using pred_v
-        pred = predictions.pred_v
+        # calculate loss using pred_start
+        pred = predictions.pred_start
+        pred = pred.softmax(dim=-1)
         loss = self.loss_fn(pred, target, reduction='mean')
         return loss
 
@@ -605,7 +607,7 @@ class DiscreteDiffusionLayer(BaseDiffusion):
 
         x_t = result_attention
         new_attention_mask = (x_t != blank_token_id)
-        return x_t, new_attention_mask, target
+        return x_t, new_attention_mask, target, times, alpha, kappa, gamma
 
     def _uniformly_sample_from_vocab(self, vocab_size: int, shape: Tuple[int], device: torch.device):
         return torch.randint(0, vocab_size, shape, device=device)
