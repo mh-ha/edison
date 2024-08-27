@@ -1,10 +1,11 @@
 from abc import ABC, abstractmethod
-from typing import Optional, List
+from typing import Optional, List, Union
 
 from torch import Tensor
 from lightning import LightningModule
 
 from edison.configs.base import Config
+from edison.configs.discrete_diffusion import DiscreteDiffusionConfig
 
 
 class BaseEdisonAE(LightningModule, ABC):
@@ -34,7 +35,7 @@ class BaseEdisonAE(LightningModule, ABC):
 
 
 class BaseEdisonDiffusion(LightningModule, ABC):
-    def __init__(self, config: Config, autoencoder: Optional[BaseEdisonAE]):
+    def __init__(self, config: Union[Config, DiscreteDiffusionConfig], autoencoder: Optional[BaseEdisonAE]):
         super().__init__()
         self.config = config
         self.autoencoder = autoencoder

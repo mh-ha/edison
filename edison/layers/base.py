@@ -1,5 +1,5 @@
 from abc import ABC, abstractmethod
-from typing import Optional, Union, List, Tuple
+from typing import Optional, List, Tuple, Union
 
 from torch import nn, Tensor
 
@@ -15,22 +15,22 @@ class BaseDiffusion(nn.Module, ABC):
     @abstractmethod
     def forward(
         self,
-        latent: Tensor,
-        context: Optional[Tensor],
-        times: Tensor,
-        attention_mask: Optional[Tensor] = None,
-        self_cond: Optional[Tensor] = None,
+        # latent: Tensor,
+        # context: Optional[Tensor],
+        # times: Tensor,
+        # attention_mask: Optional[Tensor] = None,
+        # self_cond: Optional[Tensor] = None,
     ) -> Tensor:
         raise NotImplementedError
 
     @abstractmethod
     def encode(
         self,
-        latent: Tensor,
-        context: Optional[Tensor],
-        alpha: Tensor,
-        attention_mask: Optional[Tensor] = None,
-        self_cond: Optional[Tensor] = None,
+        # latent: Tensor,
+        # context: Optional[Tensor],
+        # alpha: Tensor,
+        # attention_mask: Optional[Tensor] = None,
+        # self_cond: Optional[Tensor] = None,
     ) -> Tensor:
         raise NotImplementedError
 
@@ -42,10 +42,10 @@ class BaseDiffusion(nn.Module, ABC):
     @abstractmethod
     def training_step(
         self,
-        latent: Tensor,
-        context: Optional[Tensor],
-        attention_mask: Optional[Tensor],
-        times: Union[Tensor, float],
+        # latent: Tensor,
+        # context: Optional[Tensor],
+        # attention_mask: Optional[Tensor],
+        # times: Union[Tensor, float],
     ) -> Tensor:
         raise NotImplementedError
 

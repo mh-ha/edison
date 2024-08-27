@@ -433,6 +433,7 @@ class DiscreteDiffusionEncoder(BaseEncoder):
         self.ff_mult = ff_mult
         self.num_dense_connections = num_dense_connections
 
+        # Embedding
         self.layers = nn.ModuleList()
         for _ in range(depth):
             self.layers.append(
@@ -460,11 +461,12 @@ class DiscreteDiffusionEncoder(BaseEncoder):
         emb_hidden_states = []
 
         for i, layers in enumerate(self.layers):
+            # Dense connection
+            latent, emb_hidden_states = self._maybe_dense_connection_compute(i, latent, emb_hidden_states)
             latent = self._forward_layers(
                 layers, latent, time_emb, rpe=None
             )
-            # Dense connection
-            latent, emb_hidden_states = self._maybe_dense_connection(i, latent, emb_hidden_states)
+            latent, emb_hidden_states = self._maybe_dense_connection_append(i, latent, emb_hidden_states)
         return latent
 
     def _forward_layers(self, layers, latent, time_emb, rpe=None):
@@ -482,11 +484,15 @@ class DiscreteDiffusionEncoder(BaseEncoder):
         latent = emb_ff_residual(latent, emb_residual, time_emb)
         return latent
 
-    def _maybe_dense_connection(self, idx, words, hidden_states: list):
+    def _maybe_dense_connection_append(self, idx, words, hidden_states: list):
         if idx < self.num_dense_connections:
             hidden_states.append(words)
             return words, hidden_states
-        elif idx >= (len(self.layers) - self.num_dense_connections):
+        else:
+            return words, hidden_states
+
+    def _maybe_dense_connection_compute(self, idx, words, hidden_states: list):
+        if idx >= (len(self.layers) - self.num_dense_connections):
             proj_index = idx - (len(self.layers) - self.num_dense_connections)
             words = self.proj_dense_connection[proj_index](torch.cat([words, hidden_states.pop(-1)], dim=-1))
             return words, hidden_states

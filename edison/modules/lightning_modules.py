@@ -7,6 +7,7 @@ from transformers import get_scheduler
 from transformers.modeling_outputs import BaseModelOutput
 
 from edison.configs.base import Config
+from edison.configs.discrete_diffusion import DiscreteDiffusionConfig
 from edison.constants.generation import GENERATION_KWARGS
 from edison.layers import get_module as get_layer_module
 from edison.layers.base import BaseDiffusion
@@ -306,14 +307,17 @@ class BaselineDiffusion(BaseEdisonDiffusion):
 class DiscreteDiffusion(BaseEdisonDiffusion):
     def __init__(
         self,
-        config: Config,
-        autoencoder: Optional[EdisonAE] = None,
-        tokenizer=None,
+        config: DiscreteDiffusionConfig,
+        tokenizer,
+        word_embedding_layer: torch.nn.Module,
     ):
-        super().__init__(config=config, autoencoder=autoencoder)
+        super().__init__(config=config, autoencoder=None)
         self.save_hyperparameters('config')
         self.tokenizer = tokenizer
-        self.diffusion_model: BaseDiffusion = get_layer_module(module_name="discrete_diffusion_layer")(config=config)
+        self.diffusion_model: BaseDiffusion = get_layer_module(module_name="discrete_diffusion_layer")(
+            config=config,
+            word_embedding_layer=word_embedding_layer,
+        )
         self.eval_data = None
 
     def forward(self, input_ids, attention_mask=None):
@@ -327,7 +331,8 @@ class DiscreteDiffusion(BaseEdisonDiffusion):
         attention_mask = batch['attention_mask']
         loss = self.diffusion_model.training_step(
             input_ids=inputs,
-            attention_mask=attention_mask,)
+            attention_mask=attention_mask,
+            blank_token_id=self.tokenizer.mask_token_id,)
         self.log('loss_diffusion', loss, on_step=True, prog_bar=True)
         self.log('lr_diffusion', self.trainer.optimizers[0].param_groups[0]['lr'], on_step=True, prog_bar=True)
         return loss
@@ -342,12 +347,12 @@ class DiscreteDiffusion(BaseEdisonDiffusion):
             )
 
     def configure_optimizers(self):
-        optimizer = torch.optim.AdamW(self.diffusion_model.parameters(), lr=self.config.learning_rate_peak_diffusion)
+        optimizer = torch.optim.AdamW(self.diffusion_model.parameters(), lr=self.config.learning_rate_peak)
         scheduler = get_scheduler(
             self.config.lr_schedule,
             optimizer=optimizer,
             num_warmup_steps=self.config.warmup_steps,
-            num_training_steps=self.config.max_steps_diffusion,
+            num_training_steps=self.config.max_steps,
         )
 
         return {

@@ -59,14 +59,20 @@ def get_dataloader_from_name(name):
 def get_dataloader(
     config: Config,
     dataset,
-    model,
-    max_seq_len,
+    model=None,
+    max_seq_len=64,
     mode='diffusion',
     shuffle=True,
     context_tokenizer=None,
+    tokenizer=None,
+    decoder_start_token_id=None,
 ):
-    decoder_start_token_id = model.lm._get_decoder_start_token_id()
-    tokenizer = model.tokenizer
+    if model is not None:
+        decoder_start_token_id = model.lm._get_decoder_start_token_id()
+        tokenizer = model.tokenizer
+    else:
+        tokenizer = tokenizer
+        decoder_start_token_id = decoder_start_token_id
 
     def tokenization(example):
         if mode == 'diffusion' and config.dataset_name in {'xsum', 'qqp'}:
