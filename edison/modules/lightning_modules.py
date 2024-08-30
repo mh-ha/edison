@@ -337,14 +337,14 @@ class DiscreteDiffusion(BaseEdisonDiffusion):
         self.log('lr_diffusion', self.trainer.optimizers[0].param_groups[0]['lr'], on_step=True, prog_bar=True)
         return loss
 
-    def on_train_epoch_end(self):
-        if self.current_epoch % self.config.eval_epoch_interval == 0:
-            self.evaluate(
-                num_samples=self.config.eval_samples,
-                # self.config.max_seq_len,
-                batch_size=self.config.eval_batch_size,
-                seed=self.config.eval_seed,
-            )
+    # def on_train_epoch_end(self):
+    #     if self.current_epoch % self.config.eval_epoch_interval == 0:
+    #         self.evaluate(
+    #             num_samples=self.config.eval_samples,
+    #             # self.config.max_seq_len,
+    #             batch_size=self.config.eval_batch_size,
+    #             seed=self.config.eval_seed,
+    #         )
 
     def configure_optimizers(self):
         optimizer = torch.optim.AdamW(self.diffusion_model.parameters(), lr=self.config.learning_rate_peak)

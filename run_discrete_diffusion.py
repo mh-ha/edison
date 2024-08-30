@@ -33,7 +33,7 @@ def main():
     # wandb_logger = None
     print(config)
     model = train(config, wandb_logger=wandb_logger)
-    evaluate_trained_model(model, wandb_logger=wandb_logger)
+    # evaluate_trained_model(model, wandb_logger=wandb_logger)
 
 
 if __name__ == '__main__':
