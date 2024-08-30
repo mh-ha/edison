@@ -473,13 +473,13 @@ class DiscreteDiffusionLayer(BaseDiffusion):
         attention_mask: Optional[Tensor] = None,
         self_cond: Optional[Tensor] = None,
     ) -> DiffusionOutput:
-        alpha = utils.time_to_alpha(times)
-        pred_start = self.encode(
+        encoded = self.encode(
             latent=latent,
             context=context,
-            alpha=alpha,
+            times=times,
             attention_mask=attention_mask,
             self_cond=self_cond,)
+        pred_start = self.head(encoded)
         return DiffusionOutput(
             pred_start=pred_start,
             pred_noise=None,
@@ -489,10 +489,11 @@ class DiscreteDiffusionLayer(BaseDiffusion):
         self,
         latent: Tensor,
         context: Optional[Tensor],
-        alpha: Tensor,
+        times: Tensor,
         attention_mask: Optional[Tensor] = None,
         self_cond: Optional[Tensor] = None,
     ) -> Tensor:
+        alpha = utils.time_to_alpha(times)
         # concat self condition with latent
         if self_cond is None:
             latent_shape = latent.shape
@@ -500,7 +501,7 @@ class DiscreteDiffusionLayer(BaseDiffusion):
             latent = torch.cat((latent, self_cond), dim=-1)
         else:
             latent = torch.cat((latent, self_cond), dim=-1)
-        print(f"[DiscreteDiffusion.encode] latent: {latent.shape}, context: {context}")
+        # print(f"[DiscreteDiffusion.encode] latent: {latent.shape}, context: {context}")
 
         # positional embedding
         pos_emb = self.pos_emb(latent)
@@ -512,7 +513,7 @@ class DiscreteDiffusionLayer(BaseDiffusion):
         time_emb = self.time_mlp(alpha * 1000)
         time_emb = rearrange(time_emb, 'b d -> b 1 d')
         latent = latent + self.time_proj(time_emb) + pos_emb
-        print(f"[DiscreteDiffusion.encode] latent: {latent.shape}, time_emb: {time_emb.shape}, pos_emb: {pos_emb.shape}")
+        # print(f"[DiscreteDiffusion.encode] latent: {latent.shape}, time_emb: {time_emb.shape}, pos_emb: {pos_emb.shape}")
 
         # encoding
         encoded = self.encoder(
@@ -520,12 +521,12 @@ class DiscreteDiffusionLayer(BaseDiffusion):
             context=context,
             attention_mask=attention_mask,
             time_emb=time_emb,)
-        print(f"[DiscreteDiffusion.encode] encoded: {encoded.shape}")
+        # print(f"[DiscreteDiffusion.encode] encoded: {encoded.shape}")
 
         # normalization and output projection
         encoded = self.norm(encoded)
         encoded = self.output_proj(encoded)
-        print(f"[DiscreteDiffusion.encode] encoded: {encoded.shape}")
+        # print(f"[DiscreteDiffusion.encode] encoded: {encoded.shape}")
         return encoded
 
     @property
@@ -548,11 +549,12 @@ class DiscreteDiffusionLayer(BaseDiffusion):
         # token_ids to embedding
         latent = self.word_embedding_layer(x_t)
         context = None
-        print(f"[DiscreteDiffusion.training_step] latent: {latent.shape}, context: {context}")
+        # print(f"[DiscreteDiffusion.training_step] latent: {latent.shape}, context: {context}")
 
         # self-conditioning
         self_cond = None
-        if self.self_condition and (random() < self.config.train_self_cond_prob):
+        # if self.self_condition and (random() < self.config.train_self_cond_prob):
+        if self.self_condition and (0 < self.config.train_self_cond_prob):
             # generate self condition using diffusion model
             with torch.no_grad():
                 model_output = self.forward(
@@ -561,11 +563,22 @@ class DiscreteDiffusionLayer(BaseDiffusion):
                     times=times,
                     attention_mask=new_attention_mask,
                 )
-                self_cond = model_output.pred_start.detach()
-                print(f"[DiscreteDiffusion.training_step] self_cond: {self_cond.shape if self_cond is not None else None}")
+                pred_start = model_output.pred_start.detach()
+                # print(f"[DiscreteDiffusion.training_step] pred_start: {pred_start.shape}, new_attention_mask: {new_attention_mask.shape}")
+                pred_start = pred_start.softmax(dim=-1).view(-1, pred_start.shape[-1])
+                pred_start = torch.multinomial(pred_start, 1)
+                # print(f"[DiscreteDiffusion.training_step] pred_start: {pred_start.shape}")
+                pred_start = pred_start.view(x_t.shape)
+                # print(f"[DiscreteDiffusion.training_step] pred_start: {pred_start.shape}, x_t: {x_t.shape}")
+                pred_sentence = x_t * new_attention_mask + pred_start * (~new_attention_mask)
+                # print(f"[DiscreteDiffusion.training_step] pred_sentence: {pred_sentence}")
+                self_cond = self.word_embedding_layer(pred_sentence)
+
+                # self_cond = model_output.detach()
+                # print(f"[DiscreteDiffusion.training_step] self_cond: {self_cond.shape if self_cond is not None else None}")
                 if self.config.l2_normalize_latents:
                     self_cond = F.normalize(self_cond, dim=-1) * math.sqrt(self_cond.shape[-1])
-        print(f"[DiscreteDiffusion.training_step] self_cond: {self_cond.shape if self_cond is not None else None}")
+        # print(f"[DiscreteDiffusion.training_step] self_cond: {self_cond.shape if self_cond is not None else None}")
 
         # predict
         predictions = self.forward(
@@ -578,19 +591,20 @@ class DiscreteDiffusionLayer(BaseDiffusion):
         # calculate loss using pred_start
         pred = predictions.pred_start
         pred = pred.softmax(dim=-1)
-        print(f"[DiscreteDiffusion.training_step] pred: {pred.shape}, target: {target.shape}")
+        # print(f"[DiscreteDiffusion.training_step] pred: {pred.shape}, target: {target.shape}")
 
         new_attention_mask = new_attention_mask.view(-1)
         pred = pred.view(-1, pred.shape[-1])
-        print(f"[DiscreteDiffusion.training_step] pred: {pred.shape}, new_attention_mask: {new_attention_mask.shape}")
+        # print(f"[DiscreteDiffusion.training_step] pred: {pred.shape}, new_attention_mask: {new_attention_mask.shape}")
         pred = pred[~new_attention_mask]
-        print(f"[DiscreteDiffusion.training_step] pred: {pred.shape}")
+        # print(f"[DiscreteDiffusion.training_step] pred: {pred.shape}")
         target = target.view(-1)
-        print(f"[DiscreteDiffusion.training_step] target: {target.shape}")
-        target = target[~new_attention_mask]
-        print(f"[DiscreteDiffusion.training_step] target: {target.shape}")
-
-        print(f"pred.shape: {pred}, target.shape: {target}")
+        # print(f"[DiscreteDiffusion.training_step] target: {target.shape}")
+        target = target[~new_attention_mask].long()
+        # make target to one-hot
+        # target = F.one_hot(target, num_classes=self.config.vocab_size).float()
+        # print(f"[DiscreteDiffusion.training_step] target: {target.shape}")
+        # print(f"pred.shape: {pred}, target.shape: {target}")
         loss = self.loss_fn(pred, target, reduction='mean')
         return loss
 
@@ -599,7 +613,8 @@ class DiscreteDiffusionLayer(BaseDiffusion):
     def forward_process(self, input_ids: Tensor, attention_mask: Tensor, blank_token_id: int):
         # attention_mask가 padding token을 가리키지만 여기서는 blank token을 가리키는 것으로 간주
         attention_mask = attention_mask.bool()
-        input_ids = input_ids * attention_mask + blank_token_id * (~attention_mask)
+        # input_ids = input_ids * attention_mask + blank_token_id * (~attention_mask)
+        # input_ids = input_ids * attention_mask + 1 * (~attention_mask)
 
         times = torch.zeros((input_ids.shape[0],)).uniform_(0, 1.).to(input_ids.device)
         sequence = torch.ones(input_ids.shape, device=input_ids.device)
@@ -612,51 +627,62 @@ class DiscreteDiffusionLayer(BaseDiffusion):
         prob_word_stay = 1-alpha-kappa
         prob_blank_stay = 1-gamma
         prob_blank_change = gamma
-        print(f"[DiscreteDiffusion.forward_process] prob_word_blank: {prob_word_blank.shape}, prob_word_change: {prob_word_change.shape}, prob_word_stay: {prob_word_stay.shape}")
+        # print(f"[DiscreteDiffusion.forward_process] prob_word_blank: {prob_word_blank.shape}, prob_word_change: {prob_word_change.shape}, prob_word_stay: {prob_word_stay.shape}")
 
         word_probs = torch.multinomial(
             torch.stack([prob_word_change, prob_word_stay, prob_word_blank], dim=-1).squeeze(), input_ids.shape[-1], replacement=True)
         blank_probs = torch.multinomial(
             torch.stack([prob_blank_change, prob_blank_stay], dim=-1).squeeze(), input_ids.shape[-1], replacement=True)
-        print(f"[DiscreteDiffusion.forward_process] word_probs: {word_probs.shape}, blank_probs: {blank_probs.shape}")
+        # print(f"[DiscreteDiffusion.forward_process] word_probs: {word_probs.shape}, blank_probs: {blank_probs.shape}")
 
-        change_word = (word_probs == 0).int()
-        change_blank = (blank_probs == 0).int()
+        change_word_to_word = (word_probs == 0).int()
+        change_blank_to_word = (blank_probs == 0).int()
         stay_word = (word_probs == 1).int()
         stay_blank = (blank_probs == 1).int()
-        blank = (word_probs == 2).int()
-        print(f"[DiscreteDiffusion.forward_process] change_word: {change_word.shape}, change_blank: {change_blank.shape}, stay_word: {stay_word.shape}, stay_blank: {stay_blank.shape}")
-        print(f"[DiscreteDiffusion.forward_process] blank: {blank.shape}, blank_token_id: {blank_token_id}")
+        change_word_to_blank = (word_probs == 2).int()
+        # print(f"[DiscreteDiffusion.forward_process] change_word: {change_word_to_word.shape}, change_blank: {change_blank_to_word.shape}, stay_word: {stay_word.shape}, stay_blank: {stay_blank.shape}")
+        # print(f"[DiscreteDiffusion.forward_process] blank: {change_word_to_blank.shape}, blank_token_id: {blank_token_id}")
+        # print(f"[DiscreteDiffusion.forward_process] change_word_to_word: {change_word_to_word}\nchange_blank_to_word: {change_blank_to_word}\nstay_word: {stay_word}\nstay_blank: {stay_blank}\nchange_word_to_blank: {change_word_to_blank}")
 
-        change = change_word * attention_mask + change_blank * (~attention_mask)
-        # print(f"change.shape: {change.shape}")
-        stay = stay_word * attention_mask + stay_blank * (~attention_mask)
-        # print(f"stay.shape: {stay.shape}")
-        sampled = self._uniformly_sample_from_vocab(self.config.vocab_size, shape=change.shape, device=change.device)
-        sampled = sampled * change
-        # print(f"sampled.shape: {sampled.shape}")
-        # print(f"sequence.shape: {sequence.shape}")
-        stayed = stay
-        blank = torch.full(sequence.shape, blank_token_id, device=blank.device) * blank
-        print(f"[DiscreteDiffusion.forward_process] attention_mask: {attention_mask}\n")
-        print(f"[DiscreteDiffusion.forward_process] change_word: {change_word}\n")
-        print(f"[DiscreteDiffusion.forward_process] change_blank: {change_blank}\n")
-        print(f"[DiscreteDiffusion.forward_process] change: {change}\n")
-        print(f"[DiscreteDiffusion.forward_process] stay: {stay}\n")
-        print(f"[DiscreteDiffusion.forward_process] blank: {blank}\n")
-        # print(f"blank.shape: {blank.shape}")
-        result_attention = stayed + blank + sampled
-        print(f"[DiscreteDiffusion.forward_process] result_attention: {result_attention.shape}\n")
-        print(f"[DiscreteDiffusion.forward_process] result_attention: {result_attention}\n")
+        change_word_to_word = change_word_to_word * attention_mask
+        change_blank_to_word = change_blank_to_word * (~attention_mask)
+
+        stay_word = stay_word * attention_mask
+        stay_blank = stay_blank * (~attention_mask)
+
+        sampled = self._uniformly_sample_from_vocab(
+            self.config.vocab_size, shape=change_word_to_word.shape, device=change_word_to_word.device
+        )
+        sampled_word_to_word = sampled * change_word_to_word
+        sampled_blank_to_word = sampled * change_blank_to_word
+
+        change_word_to_blank = change_word_to_blank * attention_mask
+        # print(f"[DiscreteDiffusion.forward_process] attention_mask: {attention_mask}\n")
+        # print(f"[DiscreteDiffusion.forward_process] change_word: {change_word}\n")
+        # print(f"[DiscreteDiffusion.forward_process] change_blank: {change_blank}\n")
+        # print(f"[DiscreteDiffusion.forward_process] sampled_word_to_word: {sampled_word_to_word}\n")
+        # print(f"[DiscreteDiffusion.forward_process] sampled_blank_to_word: {sampled_blank_to_word}\n")
+        # print(f"[DiscreteDiffusion.forward_process] stay_word: {stay_word}\n")
+        # print(f"[DiscreteDiffusion.forward_process] stay_blank: {stay_blank}\n")
+        # print(f"[DiscreteDiffusion.forward_process] change_word_to_blank: {change_word_to_blank}\n")
+        # result_attention = (sequence * stayed) + (sequence * change_word_to_blank) + (sequence * sampled)
+        result_attention = (
+            (input_ids * stay_word * attention_mask) +
+            (blank_token_id * stay_blank * ~attention_mask) +
+            (blank_token_id * change_word_to_blank * attention_mask) +
+            (sequence * sampled_word_to_word * attention_mask) +
+            (sequence * sampled_blank_to_word * ~attention_mask)
+        ).int()
+        # print(f"[DiscreteDiffusion.forward_process] result_attention: {result_attention.shape}\n")
+        # print(f"[DiscreteDiffusion.forward_process] stayed + change_word_to_blank + sampled: {result_attention}\n")
 
         x_t = result_attention
-        print(f"[DiscreteDiffusion.forward_process] x_t: {x_t}\n\n")
+        # print(f"[DiscreteDiffusion.forward_process] x_t: {x_t}\n\n")
         new_attention_mask = (x_t != blank_token_id)
-        x_t = x_t * (target * new_attention_mask)
-        print(f"[DiscreteDiffusion.forward_process] x_t: {x_t.shape}, new_attention_mask: {new_attention_mask.shape}, target: {target.shape}")
-        print(f"[DiscreteDiffusion.forward_process] x_t: {x_t}\n\n")
-        print(f"[DiscreteDiffusion.forward_process] new_attention_mask: {new_attention_mask}\n\n")
-        print(f"[DiscreteDiffusion.forward_process] target: {target}\n\n")
+        # print(f"[DiscreteDiffusion.forward_process] x_t: {x_t.shape}, new_attention_mask: {new_attention_mask.shape}, target: {target.shape}")
+        # print(f"[DiscreteDiffusion.forward_process] x_t: {x_t}\n\n")
+        # print(f"[DiscreteDiffusion.forward_process] new_attention_mask: {new_attention_mask}\n\n")
+        # print(f"[DiscreteDiffusion.forward_process] target: {target}\n\n")
         return x_t, new_attention_mask, target, times, alpha, kappa, gamma
 
     def _uniformly_sample_from_vocab(self, vocab_size: int, shape: Tuple[int], device: torch.device):

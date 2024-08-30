@@ -37,7 +37,7 @@ class DiscreteDiffusionConfig:
     diffusion_module_name: str = 'discrete_diffusion'
     l2_normalize_latents: bool = True
     use_mask: bool = True
-    loss_type: str = 'l2'
+    loss_type: str = 'ce'
     train_self_cond_prob: float = 0.5
     internal_dim: int = 768
     network_depth: int = 12
