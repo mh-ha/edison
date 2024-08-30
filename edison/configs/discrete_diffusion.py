@@ -20,7 +20,7 @@ class DiscreteDiffusionConfig:
     train_batch_size: int = 32
     max_seq_len: int = 64
     dropout: float = 0.1
-    debug: bool = True
+    debug: bool = False
 
     # Optimizer
     learning_rate_peak: float = 2e-4
@@ -44,7 +44,7 @@ class DiscreteDiffusionConfig:
     network_depth: int = 12
     num_attn_heads: int = 12
     ff_mult: int = 4
-    self_condition: bool = True
+    self_condition: bool = False
     num_dense_connections: int = 3
 
     # Evaluation
