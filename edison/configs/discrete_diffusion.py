@@ -20,6 +20,7 @@ class DiscreteDiffusionConfig:
     train_batch_size: int = 32
     max_seq_len: int = 64
     dropout: float = 0.1
+    debug: bool = True
 
     # Optimizer
     learning_rate_peak: float = 2e-4

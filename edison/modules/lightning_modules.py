@@ -329,10 +329,51 @@ class DiscreteDiffusion(BaseEdisonDiffusion):
     def training_step(self, batch, batch_idx):
         inputs = batch['input_ids']
         attention_mask = batch['attention_mask']
-        loss = self.diffusion_model.training_step(
-            input_ids=inputs,
-            attention_mask=attention_mask,
-            blank_token_id=self.tokenizer.mask_token_id,)
+        if self.config.debug:
+            loss, x_t, new_attention_mask, pred, target, times, alpha, kappa, gamma = self.diffusion_model.training_step(
+                input_ids=inputs,
+                attention_mask=attention_mask,
+                blank_token_id=self.tokenizer.mask_token_id,
+                debug=True,)
+            self.logger.log_table(
+                key='masked_input_ids',
+                columns=['text'],
+                data=[[text] for text in self.tokenizer.batch_decode(x_t)],
+            )
+            self.logger.log_table(
+                key='target_input_ids',
+                columns=['text'],
+                data=[[text] for text in self.tokenizer.batch_decode(target)],
+            )
+            # self.log(
+            #     name='model_output',
+            #     value=pred,
+            # )
+            self.logger.log_table(
+                key='masked_input_ids_only_masked',
+                columns=['text'],
+                data=[[text] for text in self.tokenizer.batch_decode(x_t[~new_attention_mask])],
+            )
+            self.logger.log_table(
+                key='target_input_ids_only_masked',
+                columns=['text'],
+                data=[[text] for text in self.tokenizer.batch_decode(target[~new_attention_mask])],
+            )
+            # self.log(
+            #     name='model_output_only_masked',
+            #     value=pred[~new_attention_mask],
+            # )
+            self.logger.log_table(
+                key='schedules',
+                columns=['times', 'alpha', 'kappa', 'gamma'],
+                data=[[t, a, k, g] for t, a, k, g in zip(times, alpha, kappa, gamma)],
+            )
+        else:
+            loss = self.diffusion_model.training_step(
+                input_ids=inputs,
+                attention_mask=attention_mask,
+                blank_token_id=self.tokenizer.mask_token_id,
+                debug=False,)
         self.log('loss_diffusion', loss, on_step=True, prog_bar=True)
         self.log('lr_diffusion', self.trainer.optimizers[0].param_groups[0]['lr'], on_step=True, prog_bar=True)
         return loss

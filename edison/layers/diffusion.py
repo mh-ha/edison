@@ -542,10 +542,13 @@ class DiscreteDiffusionLayer(BaseDiffusion):
         input_ids: Tensor,
         attention_mask: Tensor,
         blank_token_id: int,
+        debug: bool = False,
     ) -> Tensor:
         (
             x_t, new_attention_mask, target, times, alpha, kappa, gamma
         ) = self.forward_process(input_ids, attention_mask, blank_token_id)
+        if debug:
+            return_target = target
         # token_ids to embedding
         latent = self.word_embedding_layer(x_t)
         context = None
@@ -591,6 +594,8 @@ class DiscreteDiffusionLayer(BaseDiffusion):
         # calculate loss using pred_start
         pred = predictions.pred_start
         pred = pred.softmax(dim=-1)
+        if debug:
+            return_pred = pred.clone().detach()
         # print(f"[DiscreteDiffusion.training_step] pred: {pred.shape}, target: {target.shape}")
 
         new_attention_mask = new_attention_mask.view(-1)
@@ -606,10 +611,14 @@ class DiscreteDiffusionLayer(BaseDiffusion):
         # print(f"[DiscreteDiffusion.training_step] target: {target.shape}")
         # print(f"pred.shape: {pred}, target.shape: {target}")
         loss = self.loss_fn(pred, target, reduction='mean')
-        return loss
+        if debug:
+            return loss, x_t, new_attention_mask.view(x_t.shape), return_pred, return_target, times, alpha, kappa, gamma
+        else:
+            return loss
 
 # LD4LG를 옵션으로 넣지 않으면 masked diffusion과 동일
 # 성능이 masked diffusion과 비슷하게 나와야 함
+    @torch.no_grad()
     def forward_process(self, input_ids: Tensor, attention_mask: Tensor, blank_token_id: int):
         # attention_mask가 padding token을 가리키지만 여기서는 blank token을 가리키는 것으로 간주
         attention_mask = attention_mask.bool()
