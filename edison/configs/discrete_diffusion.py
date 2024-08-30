@@ -6,6 +6,7 @@ class DiscreteDiffusionConfig:
     ############################
 
     # Trainer
+    find_unused_parameters: bool = False
     gradient_clip_val: float = 1.0
     gradient_clip_algorithm: str = 'norm'
     gradient_accumulation_steps: int = 1
