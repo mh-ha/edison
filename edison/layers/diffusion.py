@@ -629,7 +629,7 @@ class DiscreteDiffusionLayer(BaseDiffusion):
         sequence = torch.ones(input_ids.shape, device=input_ids.device)
         target = input_ids.clone()
         # <pad> -> <blank>
-        # target = target * attention_mask + blank_token_id * (~attention_mask)
+        target = target * attention_mask + blank_token_id * torch.ones_like(target) * (~attention_mask)
         alpha = 1 - utils.time_to_alpha(times, input_ids.ndim)
         kappa = 1 - utils.time_to_alpha(times, input_ids.ndim) if not self.use_mask else torch.zeros_like(alpha)
         gamma = 1 - utils.time_to_alpha(times, input_ids.ndim) if not self.use_mask else torch.zeros_like(alpha)
