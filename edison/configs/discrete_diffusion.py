@@ -18,7 +18,7 @@ class DiscreteDiffusionConfig:
     dataloader_name: str = 'get_dataloader'
     max_steps: int = 250000
     train_batch_size: int = 32
-    max_seq_len: int = 64
+    max_seq_len: int = 32
     dropout: float = 0.1
     debug: bool = False
 
