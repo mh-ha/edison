@@ -479,7 +479,9 @@ class DiscreteDiffusionLayer(BaseDiffusion):
             times=times,
             attention_mask=attention_mask,
             self_cond=self_cond,)
+        # print(f"[DiscreteDiffusion.forward] encoded: {encoded.shape}")
         pred_start = self.head(encoded)
+        # print(f"[DiscreteDiffusion.forward] pred_start: {pred_start.shape}")
         return DiffusionOutput(
             pred_start=pred_start,
             pred_noise=None,
@@ -553,6 +555,7 @@ class DiscreteDiffusionLayer(BaseDiffusion):
         latent = self.word_embedding_layer(x_t)
         context = None
         # print(f"[DiscreteDiffusion.training_step] latent: {latent.shape}, context: {context}")
+        # print(f"[DiscreteDiffusion.training_step] latent: {latent}\n\n")
 
         # self-conditioning
         self_cond = None
@@ -593,10 +596,11 @@ class DiscreteDiffusionLayer(BaseDiffusion):
 
         # calculate loss using pred_start
         pred = predictions.pred_start
-        pred = pred.softmax(dim=-1)
+        # pred = pred.softmax(dim=-1)
         if debug:
             return_pred = pred.clone().detach()
         # print(f"[DiscreteDiffusion.training_step] pred: {pred.shape}, target: {target.shape}")
+        # print(f"[DiscreteDiffusion.training_step] pred: {pred}\n\n")
 
         new_attention_mask = new_attention_mask.view(-1)
         pred = pred.view(-1, pred.shape[-1])
@@ -609,8 +613,12 @@ class DiscreteDiffusionLayer(BaseDiffusion):
         # make target to one-hot
         # target = F.one_hot(target, num_classes=self.config.vocab_size).float()
         # print(f"[DiscreteDiffusion.training_step] target: {target.shape}")
+        # print(f"[DiscreteDiffusion.training_step] pred_only_masked: {pred}\n\n")
+        # print(f"[DiscreteDiffusion.training_step] target_only_masked: {target}\n\n")
         # print(f"pred.shape: {pred}, target.shape: {target}")
         loss = self.loss_fn(pred, target, reduction='mean')
+        # print(f"[DiscreteDiffusion.training_step] loss: {loss}\n\n")
+        # breakpoint()
         if debug:
             return loss, x_t, new_attention_mask.view(x_t.shape), return_pred, return_target, times, alpha, kappa, gamma
         else:
