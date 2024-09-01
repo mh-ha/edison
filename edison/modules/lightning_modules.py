@@ -237,19 +237,19 @@ class BaselineDiffusion(BaseEdisonDiffusion):
         self.train_data = dataset['train']['text']
         self.valid_data = dataset['valid']['text']
 
-        # init seq_len probs
-        self.length_category_probs = self._get_length_category_probs()
+    #     # init seq_len probs
+    #     self.length_category_probs = self._get_length_category_probs()
 
-    def _get_length_category_probs(self):
-        logger.info("Initializing length categorical distribution...")
-        training_attention_mask = self.tokenizer(
-            self.train_data, padding="max_length", truncation=True, max_length=self.config.max_seq_len
-        )['attention_mask']
-        training_lengths = [sum(mask) for mask in training_attention_mask]
-        length_counts = Counter(training_lengths)
-        probs = torch.tensor([length_counts[idx]/len(training_attention_mask) for idx in range(self.config.max_seq_len+1)])
-        length_category_probs = torch.distributions.Categorical(probs=probs)
-        return length_category_probs
+    # def _get_length_category_probs(self):
+    #     logger.info("Initializing length categorical distribution...")
+    #     training_attention_mask = self.tokenizer(
+    #         self.train_data, padding="max_length", truncation=True, max_length=self.config.max_seq_len
+    #     )['attention_mask']
+    #     training_lengths = [sum(mask) for mask in training_attention_mask]
+    #     length_counts = Counter(training_lengths)
+    #     probs = torch.tensor([length_counts[idx]/len(training_attention_mask) for idx in range(self.config.max_seq_len+1)])
+    #     length_category_probs = torch.distributions.Categorical(probs=probs)
+    #     return length_category_probs
 
     def forward(self, latents, context_latents=None, attention_mask=None):
         loss = self.diffusion_model.training_step(
@@ -303,7 +303,8 @@ class BaselineDiffusion(BaseEdisonDiffusion):
         generated_texts = []
 
         for i in tqdm(range(0, num_samples, batch_size)):
-            latents, mask = self.diffusion_model.sample(batch_size, self.length_category_probs.sample((batch_size,)))
+            # latents, mask = self.diffusion_model.sample(batch_size, self.length_category_probs.sample((batch_size,)))
+            latents, mask = self.diffusion_model.sample(batch_size, [seq_len]*batch_size)
             sample_ids = self.autoencoder.decode(latents, mode='generate')
             texts_list = [self.tokenizer.decode(g, skip_special_tokens=True, clean_up_tokenization_spaces=True) for g in sample_ids]
             texts_list = [text.strip() for text in texts_list if len(text.strip()) > 0]
