@@ -311,7 +311,7 @@ class BaselineDiffusion(BaseEdisonDiffusion):
             generated_texts.extend(texts_list)
         return generated_texts
 
-    def evaluate(self, num_samples, seq_len=64, batch_size=8, seed=42, is_final_test=True):
+    def evaluate(self, num_samples, seq_len=64, batch_size=8, seed=42):
         generated_data = self.generate(num_samples, seq_len, batch_size, seed)
         reference_data = self.valid_data[:num_samples]
         result = evaluate_model(generated_data, human_references_mauve=reference_data, human_references_mem=self.train_data)
