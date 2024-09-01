@@ -18,25 +18,26 @@ def evaluate_trained_model(
     model.eval()
     model.cuda()
     dataset = get_dataset('roc')
-    reference_data = dataset['valid']['text'] + dataset['test']['text']
-    generated_data = generate_from_model(
-        model=model,
-        num_samples=5000,
-        batch_size=125,
-        # seq_len=64,
-        saved_file_name=saved_file_name
-    )
-    generated_data = generated_data['text'].tolist()
+    reference_data_for_mauve = dataset['test']['text']
+    reference_data_for_mem = dataset['train']['text']
+    generated_data = []
+    for i in range(5):
+        generated_data.append(generate_from_model(
+            model=model,
+            num_samples=1000,
+            batch_size=125,
+            # seq_len=64,
+            seed=42+i,
+        )['text'].tolist())
 
     results = []
     for i in range(5):
-        gen = generated_data[i*1000:(i+1)*1000]
-        ref = reference_data[i*1000:(i+1)*1000]
-        result = evaluate_model(gen, ref)
+        gen = generated_data[i]
+        result = evaluate_model(gen, human_references_mauve=reference_data_for_mauve, human_references_mem=reference_data_for_mem)
         results.append(result)
         if wandb_logger:
             wandb_logger.log_metrics(result, step=i)
             wandb_logger.log_table(key=f"text_generated_{i}", columns=['text'], data=[[text] for text in gen])
-            wandb_logger.log_table(key=f"text_reference_{i}", columns=['text'], data=[[text] for text in ref])
+            # wandb_logger.log_table(key=f"text_reference_{i}", columns=['text'], data=[[text] for text in ref])
     for key in results[0].keys():
         wandb_logger.log_metrics({key+"_mean": sum([result[key] for result in results])/5})

@@ -1,4 +1,6 @@
 from typing import Optional
+from collections import Counter
+import logging
 
 import torch
 from einops import einsum
@@ -16,6 +18,8 @@ from edison.modules import register_module
 from edison.modules.base import BaseEdisonAE, BaseEdisonDiffusion   # noqa: F401
 from edison.modules.lightning_data_modules import get_dataset
 from edison.metrics.evaluation import evaluate_model
+
+logger = logging.getLogger(__name__)
 
 
 @register_module(name='edison_ae')
@@ -229,7 +233,23 @@ class BaselineDiffusion(BaseEdisonDiffusion):
         self.autoencoder.freeze()
         self.tokenizer = self.autoencoder.tokenizer
         self.diffusion_model: BaseDiffusion = get_layer_module(module_name="baseline_diffusion_layer")(config=config)
-        self.eval_data = None
+        dataset = get_dataset('roc')
+        self.train_data = dataset['train']['text']
+        self.valid_data = dataset['valid']['text']
+
+        # init seq_len probs
+        self.length_category_probs = self._get_length_category_probs()
+
+    def _get_length_category_probs(self):
+        logger.info("Initializing length categorical distribution...")
+        training_attention_mask = self.tokenizer(
+            self.train_data, padding="max_length", truncation=True, max_length=self.config.max_seq_len
+        )['attention_mask']
+        training_lengths = [sum(mask) for mask in training_attention_mask]
+        length_counts = Counter(training_lengths)
+        probs = torch.tensor([length_counts[idx]/len(training_attention_mask) for idx in range(self.config.max_seq_len+1)])
+        length_category_probs = torch.distributions.Categorical(probs=probs)
+        return length_category_probs
 
     def forward(self, latents, context_latents=None, attention_mask=None):
         loss = self.diffusion_model.training_step(
@@ -283,22 +303,19 @@ class BaselineDiffusion(BaseEdisonDiffusion):
         generated_texts = []
 
         for i in tqdm(range(0, num_samples, batch_size)):
-            latents, mask = self.diffusion_model.sample(batch_size, [seq_len]*batch_size)
+            latents, mask = self.diffusion_model.sample(batch_size, self.length_category_probs.sample((batch_size,)))
             sample_ids = self.autoencoder.decode(latents, mode='generate')
             texts_list = [self.tokenizer.decode(g, skip_special_tokens=True, clean_up_tokenization_spaces=True) for g in sample_ids]
             texts_list = [text.strip() for text in texts_list if len(text.strip()) > 0]
             generated_texts.extend(texts_list)
         return generated_texts
 
-    def evaluate(self, num_samples, seq_len=64, batch_size=8, seed=42):
-        if self.eval_data is None:
-            dataset = get_dataset('roc')
-            self.eval_data = dataset['test']['text'] + dataset['valid']['text']
+    def evaluate(self, num_samples, seq_len=64, batch_size=8, seed=42, is_final_test=True):
         generated_data = self.generate(num_samples, seq_len, batch_size, seed)
-        reference_data = self.eval_data[:num_samples]
-        result = evaluate_model(generated_data, reference_data)
+        reference_data = self.valid_data[:num_samples]
+        result = evaluate_model(generated_data, human_references_mauve=reference_data, human_references_mem=self.train_data)
         for key, value in result.items():
-            if key in ['mauve', 'perplexity']:
+            if key in ['mauve', 'perplexity', 'diversity', 'memorization']:
                 self.log(f'eval_{key}', value, sync_dist_group=True)
         self.train()
 

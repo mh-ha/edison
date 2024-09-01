@@ -8,10 +8,9 @@ def generate_from_model(
     num_samples: int = 100,
     batch_size: int = 32,
     seq_len: int = 64,
-    saved_file_name: str = 'generated_samples.csv'
+    seed=1004,
 ) -> pd.DataFrame:
     model.eval()
-    samples = model.generate(num_samples, seq_len=seq_len, batch_size=batch_size, seed=1004)
+    samples = model.generate(num_samples, seq_len=seq_len, batch_size=batch_size, seed=seed)
     df = pd.DataFrame(samples, columns=['text'])
-    df.to_csv(saved_file_name, index=False)
     return df

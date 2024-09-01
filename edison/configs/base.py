@@ -48,7 +48,7 @@ class Config:
     num_encoder_latents: int = 32
     num_decoder_latents: int = 32
     transformer_decoder: bool = True
-    l2_normalize_latents: bool = False
+    l2_normalize_latents: bool = True
 
     #############################
 
