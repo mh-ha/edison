@@ -25,12 +25,12 @@ def main():
         )
     else:
         config = DiscreteDiffusionConfig()
-    # wandb_logger = WandbLogger(
-    #     project=config.project_name,
-    #     config=config.__dict__,
-    #     name=args.run_name,
-    #     log_model=True,)
-    wandb_logger = None
+    wandb_logger = WandbLogger(
+        project=config.project_name,
+        config=config.__dict__,
+        name=args.run_name,
+        log_model=True,)
+    # wandb_logger = None
     print(config)
     model = train(config, wandb_logger=wandb_logger)
     # evaluate_trained_model(model, wandb_logger=wandb_logger)
