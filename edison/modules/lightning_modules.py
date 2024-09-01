@@ -297,8 +297,9 @@ class BaselineDiffusion(BaseEdisonDiffusion):
         }
 
     @torch.no_grad()
-    def generate(self, num_samples, seq_len=64, batch_size=8, seed=42):
-        torch.manual_seed(seed)
+    def generate(self, num_samples, seq_len=64, batch_size=8, seed=None):
+        if seed:
+            torch.manual_seed(seed)
         self.eval()
         generated_texts = []
 
@@ -311,7 +312,7 @@ class BaselineDiffusion(BaseEdisonDiffusion):
             generated_texts.extend(texts_list)
         return generated_texts
 
-    def evaluate(self, num_samples, seq_len=64, batch_size=8, seed=42):
+    def evaluate(self, num_samples, seq_len=64, batch_size=8, seed=None):
         generated_data = self.generate(num_samples, seq_len, batch_size, seed)
         reference_data = self.valid_data[:num_samples]
         result = evaluate_model(generated_data, human_references_mauve=reference_data, human_references_mem=self.train_data)

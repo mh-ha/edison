@@ -1,4 +1,5 @@
 from dataclasses import dataclass
+from typing import Optional
 
 
 @dataclass
@@ -70,7 +71,7 @@ class Config:
     eval_epoch_interval: int = 10
     eval_samples: int = 1000
     eval_batch_size: int = 125
-    eval_seed: int = 42
+    eval_seed: Optional[int] = None
 
     # Generation
     sampling_timesteps: int = 250
