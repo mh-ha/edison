@@ -27,11 +27,14 @@ def main():
         )
     else:
         config = Config()
-    wandb_logger = WandbLogger(
-        project=config.project_name,
-        config=config.__dict__,
-        name=args.run_name,
-        log_model=True,)
+    if args.run_name:
+        wandb_logger = WandbLogger(
+            project=config.project_name,
+            config=config.__dict__,
+            name=args.run_name,
+            log_model=True,)
+    else:
+        wandb_logger = None
     print(config)
     model = train(config, wandb_logger=wandb_logger)
     evaluate_trained_model(model, wandb_logger=wandb_logger)

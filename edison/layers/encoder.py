@@ -359,6 +359,7 @@ class BaselineEncoder(BaseEncoder):
                     Residual(internal_dim),
                     nn.LayerNorm(internal_dim),
                     FeedForwardWithGLU(internal_dim, ff_mult),
+                    nn.LayerNorm(internal_dim),
                     TimeConditionedResidual(internal_dim*4, internal_dim),
                 ])
             )
@@ -388,7 +389,7 @@ class BaselineEncoder(BaseEncoder):
     def _forward_layers(self, layers, latent, time_emb, rpe=None):
         (
             emb_norm2, emb_self_attn_2, emb_self_attn_residual_2,
-            emb_norm3, emb_ff, emb_ff_residual
+            emb_norm3, emb_ff, emb_norm4, emb_ff_residual
         ) = layers
 
         emb_residual = latent
@@ -397,7 +398,7 @@ class BaselineEncoder(BaseEncoder):
 
         emb_residual = latent
         latent = emb_ff(emb_norm3(latent))
-        latent = emb_ff_residual(latent, emb_residual, time_emb)
+        latent = emb_ff_residual(emb_norm4(latent), emb_residual, time_emb)
         return latent
 
     def _maybe_dense_connection_append(self, idx, words, hidden_states: list):
@@ -443,6 +444,7 @@ class DiscreteDiffusionEncoder(BaseEncoder):
                     Residual(internal_dim),
                     nn.LayerNorm(internal_dim),
                     FeedForwardWithGLU(internal_dim, ff_mult),
+                    nn.LayerNorm(internal_dim),
                     TimeConditionedResidual(internal_dim*4, internal_dim),
                 ])
             )
@@ -472,7 +474,7 @@ class DiscreteDiffusionEncoder(BaseEncoder):
     def _forward_layers(self, layers, latent, time_emb, rpe=None):
         (
             emb_norm2, emb_self_attn_2, emb_self_attn_residual_2,
-            emb_norm3, emb_ff, emb_ff_residual
+            emb_norm3, emb_ff, emb_norm4, emb_ff_residual
         ) = layers
 
         emb_residual = latent
@@ -481,7 +483,7 @@ class DiscreteDiffusionEncoder(BaseEncoder):
 
         emb_residual = latent
         latent = emb_ff(emb_norm3(latent))
-        latent = emb_ff_residual(latent, emb_residual, time_emb)
+        latent = emb_ff_residual(emb_norm4(latent), emb_residual, time_emb)
         return latent
 
     def _maybe_dense_connection_append(self, idx, words, hidden_states: list):

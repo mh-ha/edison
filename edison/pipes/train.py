@@ -104,8 +104,8 @@ def train(config: Union[Config, DiscreteDiffusionConfig], wandb_logger: Optional
         model = trainer.train_discrete_diffusion()
         return model
     else:
-        model = trainer.train_AE()
-        # model: BaseEdisonAE = get_module(module_name=config.ae_module_name)(config)
+        # model = trainer.train_AE()
+        model: BaseEdisonAE = get_module(module_name=config.ae_module_name)(config)
         torch.cuda.empty_cache()
         model.freeze()
         model = trainer.train_diffusion(autoencoder=model)

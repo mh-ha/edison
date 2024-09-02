@@ -1,5 +1,4 @@
 from typing import Optional
-from collections import Counter
 import logging
 
 import torch
