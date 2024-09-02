@@ -317,7 +317,7 @@ class BaselineDiffusion(BaseEdisonDiffusion):
         result = evaluate_model(generated_data, human_references_mauve=reference_data, human_references_mem=self.train_data)
         for key, value in result.items():
             if key in ['mauve', 'perplexity', 'diversity', 'memorization']:
-                self.log(f'eval_{key}', value, sync_dist_group=True)
+                self.log(f'eval_{key}', value)
         self.train()
 
 
@@ -447,5 +447,5 @@ class DiscreteDiffusion(BaseEdisonDiffusion):
         result = evaluate_model(generated_data, reference_data)
         for key, value in result.items():
             if key in ['mauve', 'perplexity', 'diversity', 'memorization']:
-                self.log(f'eval_{key}', value, sync_dist_group=True)
+                self.log(f'eval_{key}', value)
         self.train()
