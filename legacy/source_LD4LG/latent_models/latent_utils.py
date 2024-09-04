@@ -3,10 +3,10 @@ from transformers import AutoTokenizer, PreTrainedTokenizerBase, T5ForConditiona
 from transformers.models.bart.modeling_bart import BartForConditionalGeneration
 from transformers.models.mbart.modeling_mbart import MBartForConditionalGeneration
 
-import CONSTANTS as CONSTANTS
+# import CONSTANTS as CONSTANTS
 
-from latent_models.bart_latent_model import BARTForConditionalGenerationLatent
-from latent_models.t5_latent_model import T5ForConditionalGenerationLatent, MT5ForConditionalGenerationLatent
+from .bart_latent_model import BARTForConditionalGenerationLatent
+from .t5_latent_model import T5ForConditionalGenerationLatent, MT5ForConditionalGenerationLatent
 
 
 

@@ -30,16 +30,16 @@ from datasets import concatenate_datasets
 from accelerate import Accelerator, DistributedDataParallelKwargs
 import wandb
 
-import CONSTANTS as CONSTANTS
-import diffusion.optimizer as optimizer
-import dataset_utils.text_dataset as text_dataset
-from utils.torch_utils import compute_grad_norm
-import utils.file_utils as file_utils
-from evaluation import evaluation
+# import CONSTANTS
+from ..diffusion import optimizer as optimizer
+from ..dataset_utils import text_dataset as text_dataset
+from ..utils.torch_utils import compute_grad_norm
+from ..utils import file_utils as file_utils
+from ..evaluation import evaluation
 
-from latent_models.bart_latent_model import BARTForConditionalGenerationLatent
-from latent_models.t5_latent_model import T5ForConditionalGenerationLatent
-from latent_models.latent_utils import get_latent_model
+# from .bart_latent_model import BARTForConditionalGenerationLatent
+# from .t5_latent_model import T5ForConditionalGenerationLatent
+from .latent_utils import get_latent_model
 
 
 generate_kwargs = {

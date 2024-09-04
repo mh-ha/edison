@@ -5,7 +5,7 @@ from dataclasses import dataclass
 
 from transformers import T5ForConditionalGeneration, MT5ForConditionalGeneration
 
-from latent_models.perceiver_ae import PerceiverAutoEncoder
+from .perceiver_ae import PerceiverAutoEncoder
 from einops import rearrange
 
 

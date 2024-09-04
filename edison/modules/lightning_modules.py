@@ -52,13 +52,16 @@ class EdisonAE(BaseEdisonAE):
         """
         inputs = batch['input_ids']
         attention_masks = batch['attention_mask']
-        encoder_outputs = self.lm.get_encoder()(
-            input_ids=inputs,
-            attention_mask=attention_masks)
-        encoder_outputs = self.ae.encode(
-            encoder_outputs['last_hidden_state'],
-            attention_mask=attention_masks)
-        return encoder_outputs
+        # encoder_outputs = self.lm.get_encoder()(
+        #     input_ids=inputs,
+        #     attention_mask=attention_masks)
+        # encoder_outputs = self.ae.encode(
+        #     encoder_outputs['last_hidden_state'],
+        #     attention_mask=attention_masks)
+        # return encoder_outputs
+        encoder_outputs = self.encode(inputs, attention_masks)
+        output = self.ae.decode(encoder_outputs)
+        return output
 
     def encode(self, input_ids, attention_masks, return_embeddings=False):
         encoder_outputs = self.lm.get_encoder()(

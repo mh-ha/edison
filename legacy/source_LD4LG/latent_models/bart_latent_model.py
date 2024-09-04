@@ -22,6 +22,14 @@ class BARTForConditionalGenerationLatent(BartForConditionalGeneration):
         self.perceiver_ae = PerceiverAutoEncoder(dim_lm=config.d_model, num_encoder_latents=num_encoder_latents, num_decoder_latents=num_decoder_latents, dim_ae=dim_ae, depth=num_layers, transformer_decoder=True, l2_normalize_latents=l2_normalize_latents)
 
     def get_diffusion_latent(self, encoder_outputs, attention_mask):
+        from torchinfo import summary
+        # txt_latent = torch.randn(4, 32, 64)
+        # mask = torch.ones(4, 32)
+        print(summary(
+            self.perceiver_ae, input_data=[encoder_outputs[0], attention_mask.bool()], depth=10,
+            col_names=["input_size", "output_size", "num_params", "kernel_size", "mult_adds"],
+        ))
+
         hidden_state = encoder_outputs[0]
         latent = self.perceiver_ae.encode(hidden_state, attention_mask.bool())
         return latent

@@ -6,8 +6,8 @@ from datasets import load_dataset, Value
 from torch.utils.data import Dataset, DataLoader
 from transformers import PreTrainedTokenizerBase, default_data_collator
 
-from dataset_utils.denoising_collator import DataCollatorForBartDenoisingLM
-from dataset_utils.flan_collator import DataCollatorForFlanLM
+from .denoising_collator import DataCollatorForBartDenoisingLM
+from .flan_collator import DataCollatorForFlanLM
 
 def exists(x):
     return x is not None
@@ -15,7 +15,7 @@ def exists(x):
 
 def get_dataset(dataset_name, metadata=False, synthetic_train_path=None):
     if dataset_name == 'roc':
-        roc_data_path = 'datasets/ROCstory'
+        roc_data_path = 'legacy/source_LD4LG/datasets/ROCstory'
         dataset = load_dataset("text", data_files={f'{split}': os.path.join(roc_data_path, f'roc_{split}.json') for split in ['train', 'valid']})
         dataset = process_roc_dataset(dataset)
     elif dataset_name == 'ag_news':

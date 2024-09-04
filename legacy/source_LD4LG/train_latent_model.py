@@ -1,16 +1,20 @@
-import numpy as np
+# import numpy as np
 
-import torch.nn.functional as F
-import torch
-import os 
+# import torch.nn.functional as F
+# import torch
+import os
 import json
 
-import sys
+# import sys
 
-from utils import file_utils
-from latent_models.latent_finetuning import Trainer
+# from utils import file_utils
+from .latent_models.latent_finetuning import Trainer
 
 import argparse
+
+import warnings
+os.environ['CURL_CA_BUNDLE'] = ''
+warnings.filterwarnings("ignore")
 
 def main(args):
     
