@@ -1,6 +1,6 @@
 #!/bin/bash
 
-wandb login 6b6d10185e469255f5e09e847bd5b9087da1ae73
+wandb login
 spacy download en_core_web_sm
 
 current_time=$(date +"%Y-%m-%d_%H-%M-%S")
