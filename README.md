@@ -1,7 +1,6 @@
 # edison
 
 **edison 폴더 구조**
-- `__pycache__/`
 - `configs/`
     - config 관련 폴더입니다.
 - `constants/`
@@ -24,7 +23,7 @@
  
 진입점은 다음 두 파일 중 하나로 시작하시면 됩니다.
 
-- [`run.py`](http://run.py): latent diffusion
+- `run.py`: latent diffusion
 - `run_discrete_diffusion.py` : discrete diffusion
 
 shell script로 시작하실 수도 있습니다.
