@@ -21,7 +21,7 @@ class Config:
     dataset_name: str = 'roc'
     dataloader_name: str = 'get_dataloader'
     max_steps_ae: int = 50000
-    max_steps_diffusion: int = 500000
+    max_steps_diffusion: int = 250000
     train_batch_size: int = 32
     train_batch_size_ae: int = 32
     train_batch_size_diffusion: int = 16
